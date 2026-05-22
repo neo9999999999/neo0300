@@ -2136,16 +2136,138 @@ def render_vsab_daily_signals(df_graded: pd.DataFrame, max_days: int = 50):
         shown += 1
 
 
+def _render_vsab_summary(df_graded: pd.DataFrame):
+    """선택 기간 통계 요약 — 등급별 / 전체."""
+    if df_graded.empty:
+        return
+    df = df_graded[df_graded["grade"].notna()].copy()
+    grade_pri = {"V": 4, "S": 3, "A": 2, "B": 1}
+
+    # 일자별 버킷 빌드 (중복 제거 후)
+    picks = []
+    for date, day_df in df.groupby("Date"):
+        day_df = day_df.copy()
+        day_df["_pri"] = day_df["grade"].map(grade_pri).fillna(0)
+        day_df = day_df.sort_values("_pri", ascending=False).drop_duplicates("Code", keep="first")
+        v = day_df[day_df["grade"] == "V"].nlargest(3, "avg_score")
+        s = day_df[day_df["grade"] == "S"].nlargest(3, "avg_score")
+        used = set(v["Code"]).union(set(s["Code"]))
+        a = day_df[(day_df["grade"] == "A") & (~day_df["Code"].isin(used))].nlargest(1, "avg_score")
+        used.update(a["Code"])
+        b = day_df[(day_df["grade"] == "B") & (~day_df["Code"].isin(used))].nlargest(1, "avg_score")
+        picks.append(pd.concat([v, s, a, b]))
+    if not picks:
+        return
+    pdf = pd.concat(picks, ignore_index=True)
+    pdf["weight"] = pdf["grade"].map(GRADE_WEIGHTS)
+    pdf["pnl"] = pdf["ret_120d"].fillna(0) / 100 * pdf["weight"]
+
+    # 등급별 통계 카드
+    UP = "#FF3B30"; DOWN = "#0066FF"
+    rows = ""
+    total_n = 0; total_pnl = 0
+    for g in ["V", "S", "A", "B"]:
+        info = GRADE_INFO[g]
+        sub = pdf[pdf["grade"] == g]
+        n = len(sub)
+        total_n += n
+        if n == 0:
+            rows += (
+                f'<tr style="opacity:0.4;">'
+                f'<td style="padding:10px;font-weight:800;color:{info["color"]};">{info["emoji"]} {g}급</td>'
+                f'<td colspan="7" style="padding:10px;color:var(--text-3);">없음</td>'
+                f'</tr>'
+            )
+            continue
+        rets = sub["ret_120d"].dropna()
+        avg = rets.mean() if len(rets) > 0 else 0
+        wr = (rets > 0).mean() * 100 if len(rets) > 0 else 0
+        big_win = (rets >= 50).mean() * 100 if len(rets) > 0 else 0
+        big_loss = (rets <= -30).mean() * 100 if len(rets) > 0 else 0
+        pnl = sub["pnl"].sum()
+        total_pnl += pnl
+        invest = n * GRADE_WEIGHTS[g]
+        roi = pnl / invest * 100 if invest > 0 else 0
+        avg_color = UP if avg > 0 else DOWN
+        pnl_color = UP if pnl > 0 else DOWN
+
+        def fmt_pnl(v):
+            if abs(v) >= 1e8: return f"{v/1e8:+,.2f}억"
+            if abs(v) >= 1e4: return f"{v/1e4:+,.0f}만"
+            return f"{v:+,.0f}원"
+
+        rows += "<tr>"
+        rows += f'<td style="padding:10px;font-weight:800;color:{info["color"]};">{info["emoji"]} {g}급</td>'
+        rows += f'<td style="padding:10px;text-align:center;">{n}</td>'
+        rows += f'<td style="padding:10px;text-align:right;color:{avg_color};font-weight:700;">{avg:+.2f}%</td>'
+        rows += f'<td style="padding:10px;text-align:center;">{wr:.1f}%</td>'
+        rows += f'<td style="padding:10px;text-align:right;color:{UP};font-weight:700;">{big_win:.1f}%</td>'
+        rows += f'<td style="padding:10px;text-align:right;color:{DOWN};font-weight:700;">{big_loss:.1f}%</td>'
+        rows += f'<td style="padding:10px;text-align:right;color:{pnl_color};font-weight:700;">{fmt_pnl(pnl)}</td>'
+        rows += f'<td style="padding:10px;text-align:right;font-weight:700;">{roi:+.1f}%</td>'
+        rows += "</tr>"
+
+    # 합계
+    avg_overall = pdf["ret_120d"].dropna().mean() if not pdf["ret_120d"].dropna().empty else 0
+    rows += "<tr style='border-top:2px solid var(--border);background:var(--surface-alt);'>"
+    rows += f'<td style="padding:12px;font-weight:800;">전체</td>'
+    rows += f'<td style="padding:12px;text-align:center;font-weight:800;">{total_n}</td>'
+    rows += f'<td style="padding:12px;text-align:right;font-weight:800;color:{UP if avg_overall > 0 else DOWN};">{avg_overall:+.2f}%</td>'
+    rows += f'<td style="padding:12px;"></td><td style="padding:12px;"></td><td style="padding:12px;"></td>'
+    def fmt_pnl(v):
+        if abs(v) >= 1e8: return f"{v/1e8:+,.2f}억"
+        if abs(v) >= 1e4: return f"{v/1e4:+,.0f}만"
+        return f"{v:+,.0f}원"
+    rows += f'<td style="padding:12px;text-align:right;font-weight:800;color:{UP if total_pnl > 0 else DOWN};">{fmt_pnl(total_pnl)}</td>'
+    rows += "<td style='padding:12px;'></td>"
+    rows += "</tr>"
+
+    st.markdown(
+        '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px;">'
+        '<table style="width:100%;border-collapse:collapse;font-size:13px;">'
+        '<thead><tr style="background:var(--surface-alt);">'
+        '<th style="padding:10px;text-align:left;">등급</th>'
+        '<th style="padding:10px;text-align:center;">건수</th>'
+        '<th style="padding:10px;text-align:right;">평균수익</th>'
+        '<th style="padding:10px;text-align:center;">승률</th>'
+        '<th style="padding:10px;text-align:right;">+50%↑</th>'
+        '<th style="padding:10px;text-align:right;">-30%↓</th>'
+        '<th style="padding:10px;text-align:right;">누적 손익</th>'
+        '<th style="padding:10px;text-align:right;">ROI</th>'
+        '</tr></thead>'
+        f'<tbody>{rows}</tbody></table></div>',
+        unsafe_allow_html=True,
+    )
+
+    # CSV 다운로드 — 전체 종목 리스트
+    st.markdown("<div style='height:16px;'></div>", unsafe_allow_html=True)
+    pdf_export = pdf.copy()
+    pdf_export["매수일"] = pdf_export["Date"].dt.strftime("%Y-%m-%d")
+    cols_export = ["매수일", "grade", "Name", "Code", "Market",
+                    "Close", "ChangeRatio", "avg_score", "n_presets",
+                    "weight", "ret_120d", "pnl"]
+    cols_export = [c for c in cols_export if c in pdf_export.columns]
+    rename = {"grade": "등급", "Name": "종목명", "Code": "코드", "Market": "시장",
+                "Close": "매수가", "ChangeRatio": "당일등락",
+                "avg_score": "앙상블점수", "n_presets": "추천프리셋수",
+                "weight": "매수금액", "ret_120d": "120일수익률", "pnl": "손익"}
+    pdf_export = pdf_export[cols_export].rename(columns=rename)
+    csv = pdf_export.to_csv(index=False).encode("utf-8-sig")
+    st.download_button("📥 선택 기간 종목 전체 CSV", csv,
+        file_name=f"VSAB백테스트_{datetime.now():%Y%m%d}.csv",
+        use_container_width=True, key="vsab_csv")
+
+
 # =============================================================================
 # 페이지: 백테스트 결과
 # =============================================================================
 def page_results():
     p = PALETTE[st.session_state.theme]
     st.markdown(
-        '<h1>백테스트 결과 — V/S/A/B 등급제</h1>'
+        '<h1>백테스트 결과 — V/S/A/B 등급제 (OOS 검증)</h1>'
         f'<p style="color:{p["text_secondary"]};">'
-        '4 프리셋 앙상블 등급제 (V > S > A > B) 일자별 추천 + 월별 손익. '
-        '코스닥 + 돌파매매 + 등락 7~25% 기준. 120일 보유 손익.</p>',
+        '4 프리셋 앙상블 등급제 — 코스닥 + 돌파매매 + 등락 7~25% · 120일 보유 손익 · '
+        '미래 데이터 미사용 (Out-of-Sample).</p>',
         unsafe_allow_html=True,
     )
 
@@ -2155,25 +2277,134 @@ def page_results():
 
     if df_graded.empty:
         st.warning("enriched 캐시 데이터가 없습니다. `python3 precompute_enriched.py` 실행 필요.")
+        return
+
+    # ============================================================
+    # 년/월 선택기 — V/S/A/B 데이터에 직접 적용
+    # ============================================================
+    df_graded["Date"] = pd.to_datetime(df_graded["Date"])
+    available_years = sorted(df_graded["Date"].dt.year.unique())
+    available_months = list(range(1, 13))
+
+    # 세션 디폴트 초기화
+    if "vsab_years" not in st.session_state:
+        st.session_state.vsab_years = list(available_years)
+    if "vsab_months" not in st.session_state:
+        st.session_state.vsab_months = list(range(1, 13))
+
+    st.markdown('<h3 style="margin-bottom:8px;">📅 기간 선택</h3>', unsafe_allow_html=True)
+    st.caption("선택한 년/월의 V/S/A/B 추천만 표시 — 다중 선택 가능")
+
+    # 빠른 선택
+    qa = st.columns(5)
+    if qa[0].button("전체", key="vsab_qa_all", use_container_width=True):
+        st.session_state.vsab_years = list(available_years)
+        st.session_state.vsab_months = list(range(1, 13))
+        st.rerun()
+    if qa[1].button("최근 3년", key="vsab_qa_r3", use_container_width=True):
+        st.session_state.vsab_years = available_years[-3:]
+        st.session_state.vsab_months = list(range(1, 13))
+        st.rerun()
+    if qa[2].button("최근 1년", key="vsab_qa_r1", use_container_width=True):
+        st.session_state.vsab_years = available_years[-1:]
+        st.session_state.vsab_months = list(range(1, 13))
+        st.rerun()
+    if qa[3].button("강세장만", key="vsab_qa_bull", use_container_width=True,
+                     help="2020 + 2025 (강세장)"):
+        st.session_state.vsab_years = [y for y in [2020, 2025] if y in available_years]
+        st.session_state.vsab_months = list(range(1, 13))
+        st.rerun()
+    if qa[4].button("해제", key="vsab_qa_clr", use_container_width=True):
+        st.session_state.vsab_years = []
+        st.session_state.vsab_months = []
+        st.rerun()
+
+    # 년도 버튼
+    st.markdown('<div style="font-size:13px;color:var(--text-2);font-weight:700;'
+                 'margin-top:14px;margin-bottom:6px;">년도</div>',
+                 unsafe_allow_html=True)
+    yr_cols = st.columns(len(available_years))
+    for i, year in enumerate(available_years):
+        selected = year in st.session_state.vsab_years
+        btn_type = "primary" if selected else "secondary"
+        if yr_cols[i].button(f"{year}", key=f"vsab_yr_{year}",
+                              use_container_width=True, type=btn_type):
+            if year in st.session_state.vsab_years:
+                st.session_state.vsab_years.remove(year)
+            else:
+                st.session_state.vsab_years.append(year)
+                st.session_state.vsab_years.sort()
+            st.rerun()
+
+    # 월 버튼 (6x2)
+    st.markdown('<div style="font-size:13px;color:var(--text-2);font-weight:700;'
+                 'margin-top:14px;margin-bottom:6px;">월</div>',
+                 unsafe_allow_html=True)
+    for row in range(2):
+        m_cols = st.columns(6)
+        for i in range(6):
+            m = row * 6 + i + 1
+            selected = m in st.session_state.vsab_months
+            btn_type = "primary" if selected else "secondary"
+            if m_cols[i].button(f"{m}월", key=f"vsab_m_{m}",
+                                  use_container_width=True, type=btn_type):
+                if m in st.session_state.vsab_months:
+                    st.session_state.vsab_months.remove(m)
+                else:
+                    st.session_state.vsab_months.append(m)
+                    st.session_state.vsab_months.sort()
+                st.rerun()
+
+    # 필터 적용
+    sel_years = st.session_state.vsab_years
+    sel_months = st.session_state.vsab_months
+    if not sel_years or not sel_months:
+        st.warning("⚠️ 년도와 월을 최소 1개씩 선택해주세요.")
+        return
+
+    df_filtered = df_graded[
+        df_graded["Date"].dt.year.isin(sel_years) &
+        df_graded["Date"].dt.month.isin(sel_months)
+    ].copy()
+
+    yrs_str = ", ".join(str(y) for y in sel_years)
+    mons_str = ", ".join(str(m) for m in sel_months)
+    st.markdown(
+        f'<div style="background:var(--accent-soft);border-radius:10px;'
+        f'padding:10px 16px;margin:14px 0 24px 0;border:1px solid var(--border);">'
+        f'<span style="font-weight:700;">📊 선택: {yrs_str} 년 / {mons_str} 월</span> '
+        f'<span class="muted">· {len(df_filtered):,}건 후보</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    if df_filtered.empty:
+        st.info("선택된 기간에 V/S/A/B 후보가 없습니다.")
     else:
         # 월별 손익
         st.markdown("<h2>💰 V/S/A/B 등급별 월별 손익</h2>", unsafe_allow_html=True)
-        st.caption("등급별 비중 적용 (V:50만/S:30만/A:20만/B:10만) · 120일 보유 손익")
-        render_vsab_monthly_pnl(df_graded)
+        st.caption("등급별 비중 적용 (V:50만/S:30만/A:20만/B:10만) · 120일 보유 손익 · 이상치 미제거")
+        render_vsab_monthly_pnl(df_filtered)
 
-        # 일자별 시그널
+        # 등급별 종목 리스트 — 전체 보이기 (페이지네이션 X)
         st.markdown("<div style='height:32px;'></div>", unsafe_allow_html=True)
-        st.markdown("<h2>📋 일자별 등급별 추천 (최근 50일)</h2>", unsafe_allow_html=True)
-        st.caption("V/S는 점수 상위 3개, A/B는 점수 1위 1개 (없으면 미표시)")
-        render_vsab_daily_signals(df_graded, max_days=50)
+        st.markdown("<h2>📋 일자별 등급별 추천 종목 — 전체</h2>", unsafe_allow_html=True)
+        st.caption(f"V/S는 점수 상위 3개, A/B는 점수 1위 · 선택된 기간 전체 표시 (최신순)")
+        # max_days = 충분히 큰 값으로 (사실상 전체)
+        render_vsab_daily_signals(df_filtered, max_days=10000)
 
-        st.markdown("<div style='height:48px;'></div>", unsafe_allow_html=True)
-        st.markdown("---")
-        show_detail = st.toggle("🔧 [참고] 전체 OOS 검증 + 9 프리셋 백테스트 상세 보기",
-                                  value=False, key="show_detail_backtest")
-        if not show_detail:
-            return  # 상세 보지 않으면 여기서 끝
-        st.markdown("<div style='height:24px;'></div>", unsafe_allow_html=True)
+        # 통계 요약
+        st.markdown("<div style='height:32px;'></div>", unsafe_allow_html=True)
+        st.markdown("<h2>📊 선택 기간 통계 요약</h2>", unsafe_allow_html=True)
+        _render_vsab_summary(df_filtered)
+
+    st.markdown("<div style='height:48px;'></div>", unsafe_allow_html=True)
+    st.markdown("---")
+    show_detail = st.toggle("🔧 [참고] 전체 OOS 검증 + 9 프리셋 백테스트 상세 보기",
+                              value=False, key="show_detail_backtest")
+    if not show_detail:
+        return
+    st.markdown("<div style='height:24px;'></div>", unsafe_allow_html=True)
 
 
     # 인라인 설정 (기간 포함)
