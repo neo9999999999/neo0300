@@ -1,0 +1,8 @@
+finance-datareader>=0.9.96
+pandas>=2.0
+numpy>=1.24
+streamlit>=1.30
+pyarrow>=14.0
+beautifulsoup4>=4.12
+lxml>=4.9
+requests>=2.31

@@ -1,0 +1,50 @@
+# 가상환경
+venv/
+.venv/
+env/
+ENV/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.pytest_cache/
+.coverage
+.mypy_cache/
+.ruff_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Streamlit secrets (절대 푸시 X)
+.streamlit/secrets.toml
+
+# 로그
+logs/
+*.log
+
+# 백업 / 임시
+*.bak*
+*.bak_*
+*~
+.last_overnight_resume.json
+
+# 분석 스크립트 아카이브 (재배포 불필요)
+archive_analysis/
+
+# 텔레그램 환경 (로컬 전용)
+.env
+.env.local
+
+# 캐시 — 작은 것만 LFS 추적 (큰 ohlcv는 별도)
+# cache/ohlcv_*.pkl 은 .gitattributes 로 LFS 추적
+# 임시 캐시
+cache/*.tmp
+cache/_*

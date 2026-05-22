@@ -1,0 +1,1104 @@
+{
+  "consensus_top3": [
+    {
+      "preset_key": "habarocell",
+      "preset_name": "하바로셀식 (수급 선점)",
+      "preset_desc": "수급 선점 + 힘의 응축 + 눌림목 + 과열 회피.",
+      "votes_in_top3": 19,
+      "votes_as_top1": 7,
+      "n_trades": 1111,
+      "avg_return": 0.307023702370237,
+      "win_rate": 49.774977497749774,
+      "total_return": 341.1033333333333,
+      "std": 2.7880510290151244,
+      "sharpe_annual": 1.7481208656950005,
+      "max_gain": 29.69,
+      "max_loss": -33.586666666666666
+    },
+    {
+      "preset_key": "pullback",
+      "preset_name": "눌림목 매수형 (첫눌림)",
+      "preset_desc": "첫눌림(S12) + 단기이평 지지 + 진짜지지(거래량급감).",
+      "votes_in_top3": 18,
+      "votes_as_top1": 10,
+      "n_trades": 1127,
+      "avg_return": 0.2918086364980775,
+      "win_rate": 56.433007985803016,
+      "total_return": 328.86833333333334,
+      "std": 2.2329118613625507,
+      "sharpe_annual": 2.074563969910508,
+      "max_gain": 11.446666666666667,
+      "max_loss": -34.0
+    },
+    {
+      "preset_key": "box_breakout",
+      "preset_name": "박스권 돌파형 (하바로셀)",
+      "preset_desc": "S1 박스권 돌파 가중. '힘의 응축' 정석.",
+      "votes_in_top3": 4,
+      "votes_as_top1": 0,
+      "n_trades": 248,
+      "avg_return": 0.7124529569892473,
+      "win_rate": 52.41935483870967,
+      "total_return": 176.68833333333333,
+      "std": 2.9911440632184103,
+      "sharpe_annual": 3.781108442495984,
+      "max_gain": 18.79,
+      "max_loss": -13.895000000000001
+    }
+  ],
+  "decision_points": [
+    {
+      "decision_date": "2021-04-12",
+      "test_period": "2021-04-13 ~ 2021-07-12",
+      "top1": "habarocell",
+      "top1_name": "하바로셀식 (수급 선점)",
+      "top3": [
+        "habarocell",
+        "pullback",
+        "master_guide"
+      ],
+      "top3_names": [
+        "하바로셀식 (수급 선점)",
+        "눌림목 매수형 (첫눌림)",
+        "마스터 가이드 (캔거지파)"
+      ],
+      "top3_is_scores": [
+        {
+          "key": "habarocell",
+          "name": "하바로셀식 (수급 선점)",
+          "is_score": 0.745
+        },
+        {
+          "key": "pullback",
+          "name": "눌림목 매수형 (첫눌림)",
+          "is_score": 0.653
+        },
+        {
+          "key": "master_guide",
+          "name": "마스터 가이드 (캔거지파)",
+          "is_score": 0.615
+        }
+      ],
+      "oos_chunk_perf": {
+        "habarocell": {
+          "avg": -0.1569576719576719,
+          "n": 63,
+          "win_rate": 49.2063492063492
+        },
+        "pullback": {
+          "avg": -0.041640211640211706,
+          "n": 63,
+          "win_rate": 66.66666666666666
+        },
+        "master_guide": {
+          "avg": -0.23422222222222228,
+          "n": 60,
+          "win_rate": 58.333333333333336
+        }
+      }
+    },
+    {
+      "decision_date": "2021-07-12",
+      "test_period": "2021-07-13 ~ 2021-10-15",
+      "top1": "habarocell",
+      "top1_name": "하바로셀식 (수급 선점)",
+      "top3": [
+        "habarocell",
+        "pullback",
+        "default"
+      ],
+      "top3_names": [
+        "하바로셀식 (수급 선점)",
+        "눌림목 매수형 (첫눌림)",
+        "기본 (균형 v4)"
+      ],
+      "top3_is_scores": [
+        {
+          "key": "habarocell",
+          "name": "하바로셀식 (수급 선점)",
+          "is_score": 0.452
+        },
+        {
+          "key": "pullback",
+          "name": "눌림목 매수형 (첫눌림)",
+          "is_score": 0.448
+        },
+        {
+          "key": "default",
+          "name": "기본 (균형 v4)",
+          "is_score": 0.384
+        }
+      ],
+      "oos_chunk_perf": {
+        "habarocell": {
+          "avg": 0.3210052910052911,
+          "n": 63,
+          "win_rate": 55.55555555555556
+        },
+        "pullback": {
+          "avg": 0.39788359788359795,
+          "n": 63,
+          "win_rate": 58.730158730158735
+        },
+        "default": {
+          "avg": 0.5207795698924731,
+          "n": 62,
+          "win_rate": 64.51612903225806
+        }
+      }
+    },
+    {
+      "decision_date": "2021-10-15",
+      "test_period": "2021-10-18 ~ 2022-01-13",
+      "top1": "pullback",
+      "top1_name": "눌림목 매수형 (첫눌림)",
+      "top3": [
+        "pullback",
+        "default",
+        "habarocell"
+      ],
+      "top3_names": [
+        "눌림목 매수형 (첫눌림)",
+        "기본 (균형 v4)",
+        "하바로셀식 (수급 선점)"
+      ],
+      "top3_is_scores": [
+        {
+          "key": "pullback",
+          "name": "눌림목 매수형 (첫눌림)",
+          "is_score": 0.48
+        },
+        {
+          "key": "default",
+          "name": "기본 (균형 v4)",
+          "is_score": 0.461
+        },
+        {
+          "key": "habarocell",
+          "name": "하바로셀식 (수급 선점)",
+          "is_score": 0.452
+        }
+      ],
+      "oos_chunk_perf": {
+        "pullback": {
+          "avg": 0.13608465608465606,
+          "n": 63,
+          "win_rate": 55.55555555555556
+        },
+        "default": {
+          "avg": 0.3728571428571428,
+          "n": 63,
+          "win_rate": 63.49206349206349
+        },
+        "habarocell": {
+          "avg": 0.4169135802469135,
+          "n": 54,
+          "win_rate": 51.85185185185185
+        }
+      }
+    },
+    {
+      "decision_date": "2022-01-13",
+      "test_period": "2022-01-14 ~ 2022-04-19",
+      "top1": "default",
+      "top1_name": "기본 (균형 v4)",
+      "top3": [
+        "default",
+        "habarocell",
+        "pullback"
+      ],
+      "top3_names": [
+        "기본 (균형 v4)",
+        "하바로셀식 (수급 선점)",
+        "눌림목 매수형 (첫눌림)"
+      ],
+      "top3_is_scores": [
+        {
+          "key": "default",
+          "name": "기본 (균형 v4)",
+          "is_score": 0.5
+        },
+        {
+          "key": "habarocell",
+          "name": "하바로셀식 (수급 선점)",
+          "is_score": 0.454
+        },
+        {
+          "key": "pullback",
+          "name": "눌림목 매수형 (첫눌림)",
+          "is_score": 0.451
+        }
+      ],
+      "oos_chunk_perf": {
+        "default": {
+          "avg": -0.09243386243386242,
+          "n": 63,
+          "win_rate": 39.682539682539684
+        },
+        "habarocell": {
+          "avg": 0.14312500000000009,
+          "n": 56,
+          "win_rate": 41.07142857142857
+        },
+        "pullback": {
+          "avg": -0.6076190476190474,
+          "n": 63,
+          "win_rate": 42.857142857142854
+        }
+      }
+    },
+    {
+      "decision_date": "2022-04-19",
+      "test_period": "2022-04-20 ~ 2022-07-20",
+      "top1": "habarocell",
+      "top1_name": "하바로셀식 (수급 선점)",
+      "top3": [
+        "habarocell",
+        "default",
+        "master_guide"
+      ],
+      "top3_names": [
+        "하바로셀식 (수급 선점)",
+        "기본 (균형 v4)",
+        "마스터 가이드 (캔거지파)"
+      ],
+      "top3_is_scores": [
+        {
+          "key": "habarocell",
+          "name": "하바로셀식 (수급 선점)",
+          "is_score": 0.392
+        },
+        {
+          "key": "default",
+          "name": "기본 (균형 v4)",
+          "is_score": 0.391
+        },
+        {
+          "key": "master_guide",
+          "name": "마스터 가이드 (캔거지파)",
+          "is_score": 0.279
+        }
+      ],
+      "oos_chunk_perf": {
+        "habarocell": {
+          "avg": 0.10022727272727279,
+          "n": 44,
+          "win_rate": 36.36363636363637
+        },
+        "default": {
+          "avg": -0.01913888888888885,
+          "n": 60,
+          "win_rate": 45.0
+        },
+        "master_guide": {
+          "avg": -0.752070707070707,
+          "n": 33,
+          "win_rate": 30.303030303030305
+        }
+      }
+    },
+    {
+      "decision_date": "2022-07-20",
+      "test_period": "2022-07-21 ~ 2022-10-25",
+      "top1": "habarocell",
+      "top1_name": "하바로셀식 (수급 선점)",
+      "top3": [
+        "habarocell",
+        "default",
+        "pullback"
+      ],
+      "top3_names": [
+        "하바로셀식 (수급 선점)",
+        "기본 (균형 v4)",
+        "눌림목 매수형 (첫눌림)"
+      ],
+      "top3_is_scores": [
+        {
+          "key": "habarocell",
+          "name": "하바로셀식 (수급 선점)",
+          "is_score": 0.355
+        },
+        {
+          "key": "default",
+          "name": "기본 (균형 v4)",
+          "is_score": 0.337
+        },
+        {
+          "key": "pullback",
+          "name": "눌림목 매수형 (첫눌림)",
+          "is_score": 0.24
+        }
+      ],
+      "oos_chunk_perf": {
+        "habarocell": {
+          "avg": -0.16482269503546104,
+          "n": 47,
+          "win_rate": 44.680851063829785
+        },
+        "default": {
+          "avg": -0.2874293785310735,
+          "n": 59,
+          "win_rate": 42.3728813559322
+        },
+        "pullback": {
+          "avg": 0.1278735632183908,
+          "n": 58,
+          "win_rate": 51.724137931034484
+        }
+      }
+    },
+    {
+      "decision_date": "2022-10-25",
+      "test_period": "2022-10-26 ~ 2023-01-25",
+      "top1": "habarocell",
+      "top1_name": "하바로셀식 (수급 선점)",
+      "top3": [
+        "habarocell",
+        "default",
+        "pullback"
+      ],
+      "top3_names": [
+        "하바로셀식 (수급 선점)",
+        "기본 (균형 v4)",
+        "눌림목 매수형 (첫눌림)"
+      ],
+      "top3_is_scores": [
+        {
+          "key": "habarocell",
+          "name": "하바로셀식 (수급 선점)",
+          "is_score": 0.311
+        },
+        {
+          "key": "default",
+          "name": "기본 (균형 v4)",
+          "is_score": 0.268
+        },
+        {
+          "key": "pullback",
+          "name": "눌림목 매수형 (첫눌림)",
+          "is_score": 0.234
+        }
+      ],
+      "oos_chunk_perf": {
+        "habarocell": {
+          "avg": 0.7140178571428571,
+          "n": 56,
+          "win_rate": 46.42857142857143
+        },
+        "default": {
+          "avg": 0.720952380952381,
+          "n": 63,
+          "win_rate": 49.2063492063492
+        },
+        "pullback": {
+          "avg": 0.43116402116402114,
+          "n": 63,
+          "win_rate": 53.96825396825397
+        }
+      }
+    },
+    {
+      "decision_date": "2023-01-25",
+      "test_period": "2023-01-26 ~ 2023-04-25",
+      "top1": "habarocell",
+      "top1_name": "하바로셀식 (수급 선점)",
+      "top3": [
+        "habarocell",
+        "default",
+        "pullback"
+      ],
+      "top3_names": [
+        "하바로셀식 (수급 선점)",
+        "기본 (균형 v4)",
+        "눌림목 매수형 (첫눌림)"
+      ],
+      "top3_is_scores": [
+        {
+          "key": "habarocell",
+          "name": "하바로셀식 (수급 선점)",
+          "is_score": 0.342
+        },
+        {
+          "key": "default",
+          "name": "기본 (균형 v4)",
+          "is_score": 0.309
+        },
+        {
+          "key": "pullback",
+          "name": "눌림목 매수형 (첫눌림)",
+          "is_score": 0.267
+        }
+      ],
+      "oos_chunk_perf": {
+        "habarocell": {
+          "avg": 0.477010582010582,
+          "n": 63,
+          "win_rate": 57.14285714285714
+        },
+        "default": {
+          "avg": 0.7123809523809523,
+          "n": 63,
+          "win_rate": 66.66666666666666
+        },
+        "pullback": {
+          "avg": 0.5148412698412699,
+          "n": 63,
+          "win_rate": 61.904761904761905
+        }
+      }
+    },
+    {
+      "decision_date": "2023-04-25",
+      "test_period": "2023-04-26 ~ 2023-07-27",
+      "top1": "default",
+      "top1_name": "기본 (균형 v4)",
+      "top3": [
+        "default",
+        "habarocell",
+        "pullback"
+      ],
+      "top3_names": [
+        "기본 (균형 v4)",
+        "하바로셀식 (수급 선점)",
+        "눌림목 매수형 (첫눌림)"
+      ],
+      "top3_is_scores": [
+        {
+          "key": "default",
+          "name": "기본 (균형 v4)",
+          "is_score": 0.373
+        },
+        {
+          "key": "habarocell",
+          "name": "하바로셀식 (수급 선점)",
+          "is_score": 0.369
+        },
+        {
+          "key": "pullback",
+          "name": "눌림목 매수형 (첫눌림)",
+          "is_score": 0.31
+        }
+      ],
+      "oos_chunk_perf": {
+        "default": {
+          "avg": -0.3780423280423281,
+          "n": 63,
+          "win_rate": 47.61904761904761
+        },
+        "habarocell": {
+          "avg": 0.2719354838709678,
+          "n": 62,
+          "win_rate": 48.38709677419355
+        },
+        "pullback": {
+          "avg": 0.27195767195767195,
+          "n": 63,
+          "win_rate": 53.96825396825397
+        }
+      }
+    },
+    {
+      "decision_date": "2023-07-27",
+      "test_period": "2023-07-28 ~ 2023-11-01",
+      "top1": "habarocell",
+      "top1_name": "하바로셀식 (수급 선점)",
+      "top3": [
+        "habarocell",
+        "pullback",
+        "default"
+      ],
+      "top3_names": [
+        "하바로셀식 (수급 선점)",
+        "눌림목 매수형 (첫눌림)",
+        "기본 (균형 v4)"
+      ],
+      "top3_is_scores": [
+        {
+          "key": "habarocell",
+          "name": "하바로셀식 (수급 선점)",
+          "is_score": 0.365
+        },
+        {
+          "key": "pullback",
+          "name": "눌림목 매수형 (첫눌림)",
+          "is_score": 0.319
+        },
+        {
+          "key": "default",
+          "name": "기본 (균형 v4)",
+          "is_score": 0.278
+        }
+      ],
+      "oos_chunk_perf": {
+        "habarocell": {
+          "avg": -0.2760119047619048,
+          "n": 56,
+          "win_rate": 42.857142857142854
+        },
+        "pullback": {
+          "avg": 0.4075661375661376,
+          "n": 63,
+          "win_rate": 55.55555555555556
+        },
+        "default": {
+          "avg": -1.0049180327868852,
+          "n": 61,
+          "win_rate": 39.34426229508197
+        }
+      }
+    },
+    {
+      "decision_date": "2023-11-01",
+      "test_period": "2023-11-02 ~ 2024-02-01",
+      "top1": "pullback",
+      "top1_name": "눌림목 매수형 (첫눌림)",
+      "top3": [
+        "pullback",
+        "habarocell",
+        "master_guide"
+      ],
+      "top3_names": [
+        "눌림목 매수형 (첫눌림)",
+        "하바로셀식 (수급 선점)",
+        "마스터 가이드 (캔거지파)"
+      ],
+      "top3_is_scores": [
+        {
+          "key": "pullback",
+          "name": "눌림목 매수형 (첫눌림)",
+          "is_score": 0.331
+        },
+        {
+          "key": "habarocell",
+          "name": "하바로셀식 (수급 선점)",
+          "is_score": 0.312
+        },
+        {
+          "key": "master_guide",
+          "name": "마스터 가이드 (캔거지파)",
+          "is_score": 0.175
+        }
+      ],
+      "oos_chunk_perf": {
+        "pullback": {
+          "avg": 0.23380952380952386,
+          "n": 63,
+          "win_rate": 50.79365079365079
+        },
+        "habarocell": {
+          "avg": 0.09127777777777774,
+          "n": 60,
+          "win_rate": 45.0
+        },
+        "master_guide": {
+          "avg": 0.195,
+          "n": 56,
+          "win_rate": 44.642857142857146
+        }
+      }
+    },
+    {
+      "decision_date": "2024-02-01",
+      "test_period": "2024-02-02 ~ 2024-05-08",
+      "top1": "pullback",
+      "top1_name": "눌림목 매수형 (첫눌림)",
+      "top3": [
+        "pullback",
+        "habarocell",
+        "mega_trend"
+      ],
+      "top3_names": [
+        "눌림목 매수형 (첫눌림)",
+        "하바로셀식 (수급 선점)",
+        "대시세 초입형 (하승훈)"
+      ],
+      "top3_is_scores": [
+        {
+          "key": "pullback",
+          "name": "눌림목 매수형 (첫눌림)",
+          "is_score": 0.331
+        },
+        {
+          "key": "habarocell",
+          "name": "하바로셀식 (수급 선점)",
+          "is_score": 0.297
+        },
+        {
+          "key": "mega_trend",
+          "name": "대시세 초입형 (하승훈)",
+          "is_score": 0.193
+        }
+      ],
+      "oos_chunk_perf": {
+        "pullback": {
+          "avg": 0.3964550264550265,
+          "n": 63,
+          "win_rate": 68.25396825396825
+        },
+        "habarocell": {
+          "avg": 0.3122751322751322,
+          "n": 63,
+          "win_rate": 61.904761904761905
+        },
+        "mega_trend": {
+          "avg": 0.4872777777777778,
+          "n": 60,
+          "win_rate": 53.333333333333336
+        }
+      }
+    },
+    {
+      "decision_date": "2024-05-08",
+      "test_period": "2024-05-09 ~ 2024-08-07",
+      "top1": "pullback",
+      "top1_name": "눌림목 매수형 (첫눌림)",
+      "top3": [
+        "pullback",
+        "habarocell",
+        "mega_trend"
+      ],
+      "top3_names": [
+        "눌림목 매수형 (첫눌림)",
+        "하바로셀식 (수급 선점)",
+        "대시세 초입형 (하승훈)"
+      ],
+      "top3_is_scores": [
+        {
+          "key": "pullback",
+          "name": "눌림목 매수형 (첫눌림)",
+          "is_score": 0.359
+        },
+        {
+          "key": "habarocell",
+          "name": "하바로셀식 (수급 선점)",
+          "is_score": 0.312
+        },
+        {
+          "key": "mega_trend",
+          "name": "대시세 초입형 (하승훈)",
+          "is_score": 0.211
+        }
+      ],
+      "oos_chunk_perf": {
+        "pullback": {
+          "avg": 0.2047849462365591,
+          "n": 62,
+          "win_rate": 53.2258064516129
+        },
+        "habarocell": {
+          "avg": 0.5354644808743169,
+          "n": 61,
+          "win_rate": 62.295081967213115
+        },
+        "mega_trend": {
+          "avg": 0.47220338983050847,
+          "n": 59,
+          "win_rate": 62.71186440677966
+        }
+      }
+    },
+    {
+      "decision_date": "2024-08-07",
+      "test_period": "2024-08-08 ~ 2024-11-13",
+      "top1": "pullback",
+      "top1_name": "눌림목 매수형 (첫눌림)",
+      "top3": [
+        "pullback",
+        "habarocell",
+        "mega_trend"
+      ],
+      "top3_names": [
+        "눌림목 매수형 (첫눌림)",
+        "하바로셀식 (수급 선점)",
+        "대시세 초입형 (하승훈)"
+      ],
+      "top3_is_scores": [
+        {
+          "key": "pullback",
+          "name": "눌림목 매수형 (첫눌림)",
+          "is_score": 0.357
+        },
+        {
+          "key": "habarocell",
+          "name": "하바로셀식 (수급 선점)",
+          "is_score": 0.335
+        },
+        {
+          "key": "mega_trend",
+          "name": "대시세 초입형 (하승훈)",
+          "is_score": 0.232
+        }
+      ],
+      "oos_chunk_perf": {
+        "pullback": {
+          "avg": 0.07215053763440857,
+          "n": 62,
+          "win_rate": 50.0
+        },
+        "habarocell": {
+          "avg": 0.18210526315789471,
+          "n": 57,
+          "win_rate": 43.859649122807014
+        },
+        "mega_trend": {
+          "avg": -0.12361702127659571,
+          "n": 47,
+          "win_rate": 44.680851063829785
+        }
+      }
+    },
+    {
+      "decision_date": "2024-11-13",
+      "test_period": "2024-11-14 ~ 2025-02-19",
+      "top1": "pullback",
+      "top1_name": "눌림목 매수형 (첫눌림)",
+      "top3": [
+        "pullback",
+        "habarocell",
+        "mega_trend"
+      ],
+      "top3_names": [
+        "눌림목 매수형 (첫눌림)",
+        "하바로셀식 (수급 선점)",
+        "대시세 초입형 (하승훈)"
+      ],
+      "top3_is_scores": [
+        {
+          "key": "pullback",
+          "name": "눌림목 매수형 (첫눌림)",
+          "is_score": 0.343
+        },
+        {
+          "key": "habarocell",
+          "name": "하바로셀식 (수급 선점)",
+          "is_score": 0.32
+        },
+        {
+          "key": "mega_trend",
+          "name": "대시세 초입형 (하승훈)",
+          "is_score": 0.216
+        }
+      ],
+      "oos_chunk_perf": {
+        "pullback": {
+          "avg": 0.2575661375661375,
+          "n": 63,
+          "win_rate": 52.38095238095239
+        },
+        "habarocell": {
+          "avg": -0.0024858757062145662,
+          "n": 59,
+          "win_rate": 35.59322033898305
+        },
+        "mega_trend": {
+          "avg": -0.598448275862069,
+          "n": 58,
+          "win_rate": 44.827586206896555
+        }
+      }
+    },
+    {
+      "decision_date": "2025-02-19",
+      "test_period": "2025-02-20 ~ 2025-05-23",
+      "top1": "pullback",
+      "top1_name": "눌림목 매수형 (첫눌림)",
+      "top3": [
+        "pullback",
+        "habarocell",
+        "box_breakout"
+      ],
+      "top3_names": [
+        "눌림목 매수형 (첫눌림)",
+        "하바로셀식 (수급 선점)",
+        "박스권 돌파형 (하바로셀)"
+      ],
+      "top3_is_scores": [
+        {
+          "key": "pullback",
+          "name": "눌림목 매수형 (첫눌림)",
+          "is_score": 0.344
+        },
+        {
+          "key": "habarocell",
+          "name": "하바로셀식 (수급 선점)",
+          "is_score": 0.281
+        },
+        {
+          "key": "box_breakout",
+          "name": "박스권 돌파형 (하바로셀)",
+          "is_score": 0.173
+        }
+      ],
+      "oos_chunk_perf": {
+        "pullback": {
+          "avg": 0.3653968253968254,
+          "n": 63,
+          "win_rate": 52.38095238095239
+        },
+        "habarocell": {
+          "avg": 0.8973924731182796,
+          "n": 62,
+          "win_rate": 46.774193548387096
+        },
+        "box_breakout": {
+          "avg": 0.8448360655737706,
+          "n": 61,
+          "win_rate": 47.540983606557376
+        }
+      }
+    },
+    {
+      "decision_date": "2025-05-23",
+      "test_period": "2025-05-26 ~ 2025-08-25",
+      "top1": "pullback",
+      "top1_name": "눌림목 매수형 (첫눌림)",
+      "top3": [
+        "pullback",
+        "habarocell",
+        "box_breakout"
+      ],
+      "top3_names": [
+        "눌림목 매수형 (첫눌림)",
+        "하바로셀식 (수급 선점)",
+        "박스권 돌파형 (하바로셀)"
+      ],
+      "top3_is_scores": [
+        {
+          "key": "pullback",
+          "name": "눌림목 매수형 (첫눌림)",
+          "is_score": 0.351
+        },
+        {
+          "key": "habarocell",
+          "name": "하바로셀식 (수급 선점)",
+          "is_score": 0.302
+        },
+        {
+          "key": "box_breakout",
+          "name": "박스권 돌파형 (하바로셀)",
+          "is_score": 0.197
+        }
+      ],
+      "oos_chunk_perf": {
+        "pullback": {
+          "avg": 0.42529100529100533,
+          "n": 63,
+          "win_rate": 55.55555555555556
+        },
+        "habarocell": {
+          "avg": 0.35918032786885246,
+          "n": 61,
+          "win_rate": 59.01639344262295
+        },
+        "box_breakout": {
+          "avg": 0.4825268817204301,
+          "n": 62,
+          "win_rate": 53.2258064516129
+        }
+      }
+    },
+    {
+      "decision_date": "2025-08-25",
+      "test_period": "2025-08-26 ~ 2025-11-27",
+      "top1": "pullback",
+      "top1_name": "눌림목 매수형 (첫눌림)",
+      "top3": [
+        "pullback",
+        "habarocell",
+        "box_breakout"
+      ],
+      "top3_names": [
+        "눌림목 매수형 (첫눌림)",
+        "하바로셀식 (수급 선점)",
+        "박스권 돌파형 (하바로셀)"
+      ],
+      "top3_is_scores": [
+        {
+          "key": "pullback",
+          "name": "눌림목 매수형 (첫눌림)",
+          "is_score": 0.366
+        },
+        {
+          "key": "habarocell",
+          "name": "하바로셀식 (수급 선점)",
+          "is_score": 0.311
+        },
+        {
+          "key": "box_breakout",
+          "name": "박스권 돌파형 (하바로셀)",
+          "is_score": 0.211
+        }
+      ],
+      "oos_chunk_perf": {
+        "pullback": {
+          "avg": 0.7861904761904762,
+          "n": 63,
+          "win_rate": 63.49206349206349
+        },
+        "habarocell": {
+          "avg": 0.66997311827957,
+          "n": 62,
+          "win_rate": 54.83870967741935
+        },
+        "box_breakout": {
+          "avg": 0.6520967741935485,
+          "n": 62,
+          "win_rate": 56.451612903225815
+        }
+      }
+    },
+    {
+      "decision_date": "2025-11-27",
+      "test_period": "2025-11-28 ~ 2026-03-05",
+      "top1": "pullback",
+      "top1_name": "눌림목 매수형 (첫눌림)",
+      "top3": [
+        "pullback",
+        "habarocell",
+        "box_breakout"
+      ],
+      "top3_names": [
+        "눌림목 매수형 (첫눌림)",
+        "하바로셀식 (수급 선점)",
+        "박스권 돌파형 (하바로셀)"
+      ],
+      "top3_is_scores": [
+        {
+          "key": "pullback",
+          "name": "눌림목 매수형 (첫눌림)",
+          "is_score": 0.406
+        },
+        {
+          "key": "habarocell",
+          "name": "하바로셀식 (수급 선점)",
+          "is_score": 0.33
+        },
+        {
+          "key": "box_breakout",
+          "name": "박스권 돌파형 (하바로셀)",
+          "is_score": 0.232
+        }
+      ],
+      "oos_chunk_perf": {
+        "pullback": {
+          "avg": 0.8549206349206349,
+          "n": 63,
+          "win_rate": 68.25396825396825
+        },
+        "habarocell": {
+          "avg": 0.7258602150537633,
+          "n": 62,
+          "win_rate": 54.83870967741935
+        },
+        "box_breakout": {
+          "avg": 0.8699470899470898,
+          "n": 63,
+          "win_rate": 52.38095238095239
+        }
+      }
+    }
+  ],
+  "per_preset_oos": {
+    "default": {
+      "preset_key": "default",
+      "preset_name": "기본 (균형 v4)",
+      "preset_desc": "12개 시그널 균형 — 하바로셀 + 하승훈 + 마스터 가이드",
+      "votes_in_top3": 9,
+      "votes_as_top1": 2,
+      "n_trades": 557,
+      "avg_return": 0.06648414123279474,
+      "win_rate": 50.987432675044886,
+      "total_return": 37.031666666666666,
+      "std": 3.009815600287456,
+      "sharpe_annual": 0.3506537154266936,
+      "max_gain": 19.32,
+      "max_loss": -34.88333333333333
+    },
+    "box_breakout": {
+      "preset_key": "box_breakout",
+      "preset_name": "박스권 돌파형 (하바로셀)",
+      "preset_desc": "S1 박스권 돌파 가중. '힘의 응축' 정석.",
+      "votes_in_top3": 4,
+      "votes_as_top1": 0,
+      "n_trades": 248,
+      "avg_return": 0.7124529569892473,
+      "win_rate": 52.41935483870967,
+      "total_return": 176.68833333333333,
+      "std": 2.9911440632184103,
+      "sharpe_annual": 3.781108442495984,
+      "max_gain": 18.79,
+      "max_loss": -13.895000000000001
+    },
+    "habarocell": {
+      "preset_key": "habarocell",
+      "preset_name": "하바로셀식 (수급 선점)",
+      "preset_desc": "수급 선점 + 힘의 응축 + 눌림목 + 과열 회피.",
+      "votes_in_top3": 19,
+      "votes_as_top1": 7,
+      "n_trades": 1111,
+      "avg_return": 0.307023702370237,
+      "win_rate": 49.774977497749774,
+      "total_return": 341.1033333333333,
+      "std": 2.7880510290151244,
+      "sharpe_annual": 1.7481208656950005,
+      "max_gain": 29.69,
+      "max_loss": -33.586666666666666
+    },
+    "pullback": {
+      "preset_key": "pullback",
+      "preset_name": "눌림목 매수형 (첫눌림)",
+      "preset_desc": "첫눌림(S12) + 단기이평 지지 + 진짜지지(거래량급감).",
+      "votes_in_top3": 18,
+      "votes_as_top1": 10,
+      "n_trades": 1127,
+      "avg_return": 0.2918086364980775,
+      "win_rate": 56.433007985803016,
+      "total_return": 328.86833333333334,
+      "std": 2.2329118613625507,
+      "sharpe_annual": 2.074563969910508,
+      "max_gain": 11.446666666666667,
+      "max_loss": -34.0
+    },
+    "mega_trend": {
+      "preset_key": "mega_trend",
+      "preset_name": "대시세 초입형 (하승훈)",
+      "preset_desc": "장기이평(240/480) 우하향→횡보→돌파.",
+      "votes_in_top3": 4,
+      "votes_as_top1": 0,
+      "n_trades": 224,
+      "avg_return": 0.07400297619047616,
+      "win_rate": 51.78571428571429,
+      "total_return": 16.57666666666666,
+      "std": 3.4072865210456076,
+      "sharpe_annual": 0.34477899654629,
+      "max_gain": 15.83,
+      "max_loss": -35.37
+    },
+    "master_guide": {
+      "preset_key": "master_guide",
+      "preset_name": "마스터 가이드 (캔거지파)",
+      "preset_desc": "갭+이평 중첩(S11) + 컵앤핸들/역H&S(S12) 정밀 패턴 매매.",
+      "votes_in_top3": 3,
+      "votes_as_top1": 0,
+      "n_trades": 149,
+      "avg_return": -0.18759507829977637,
+      "win_rate": 46.97986577181208,
+      "total_return": -27.95166666666668,
+      "std": 4.693089082609249,
+      "sharpe_annual": -0.634545710457663,
+      "max_gain": 14.45,
+      "max_loss": -50.46
+    }
+  },
+  "period": [
+    "2020-01-01",
+    "2026-05-21"
+  ],
+  "n_decision_points": 19,
+  "train_min_days": 252,
+  "test_chunk_days": 63,
+  "universe_limit": 1000,
+  "stability_score": 0.895,
+  "computed_at": "2026-05-22 11:20",
+  "methodology": "Walk-Forward OOS: 각 결정 시점에서 그 이전 데이터로만 TOP 3 선정 → 다음 청크에 적용 → 누적 OOS 수익률. Look-ahead bias 없음."
+}
