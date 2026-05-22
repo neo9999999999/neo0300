@@ -693,7 +693,7 @@ def page_today():
     if ensemble is not None and not ensemble.empty:
         # 등급 분류 + 버킷 빌드
         graded = classify_candidates(ensemble)
-        buckets = build_grade_buckets(graded, vs_max=3, ab_only_top1=True)
+        buckets = build_grade_buckets(graded, vs_max=10, a_max=10, b_max=5, show_all=True)
 
         scan_time = st.session_state.get("last_scan_time")
         elapsed = st.session_state.get("last_scan_elapsed", 0)
@@ -1985,52 +1985,62 @@ def _load_vsab_history():
     return df
 
 
-def render_vsab_monthly_pnl(df_graded: pd.DataFrame):
+def _vsab_pick_daily(df_graded: pd.DataFrame, vs_max: int = 10,
+                       a_max: int = 10, b_max: int = 5) -> pd.DataFrame:
+    """일자별 V/S/A/B 픽 (모든 종목 표시 모드)."""
+    df = df_graded[df_graded["grade"].notna()].copy()
+    grade_pri = {"V": 4, "S": 3, "A": 2, "B": 1}
+    daily_picks = []
+    df_sorted = df.sort_values(["Date", "Code"]).copy()
+    for date, day_df in df_sorted.groupby("Date"):
+        day_df = day_df.copy()
+        day_df["_pri"] = day_df["grade"].map(grade_pri).fillna(0)
+        day_df = day_df.sort_values("_pri", ascending=False).drop_duplicates("Code", keep="first")
+        v = day_df[day_df["grade"] == "V"].nlargest(vs_max, "avg_score")
+        s = day_df[day_df["grade"] == "S"].nlargest(vs_max, "avg_score")
+        used = set(v["Code"]).union(set(s["Code"]))
+        a = day_df[(day_df["grade"] == "A") & (~day_df["Code"].isin(used))].nlargest(a_max, "avg_score")
+        used.update(a["Code"])
+        b = day_df[(day_df["grade"] == "B") & (~day_df["Code"].isin(used))].nlargest(b_max, "avg_score")
+        daily_picks.append(pd.concat([v, s, a, b]))
+    if not daily_picks:
+        return pd.DataFrame()
+    return pd.concat(daily_picks, ignore_index=True)
+
+
+def render_vsab_monthly_pnl(df_graded: pd.DataFrame, ret_col: str = "ret_180d"):
     """월별 손익 표 — V/S/A/B 등급별 손익 + 합계."""
     if df_graded.empty:
         st.caption("데이터 없음")
         return
 
-    # 각 거래에 등급별 비중 × ret_120d 적용
-    # 일자별 V/S/A/B 중첩처리 후 적용
     df = df_graded[df_graded["grade"].notna()].copy()
     df["YearMonth"] = df["Date"].dt.to_period("M").astype(str)
 
-    # 일자별 → 등급별 픽 (V/S 최대 3, A/B 최대 1 — 중복제거)
-    daily_picks = []
-    grade_pri = {"V": 4, "S": 3, "A": 2, "B": 1}
-    df_sorted = df.sort_values(["Date", "Code"]).copy()
-    for date, day_df in df_sorted.groupby("Date"):
-        day_df = day_df.copy()
-        day_df["_pri"] = day_df["grade"].map(grade_pri).fillna(0)
-        # 같은 종목 여러 등급이면 상위만
-        day_df = day_df.sort_values("_pri", ascending=False).drop_duplicates("Code", keep="first")
-        # V/S는 점수 상위 3개, A/B는 1개
-        v = day_df[day_df["grade"] == "V"].nlargest(3, "avg_score")
-        s = day_df[day_df["grade"] == "S"].nlargest(3, "avg_score")
-        used = set(v["Code"]).union(set(s["Code"]))
-        a = day_df[(day_df["grade"] == "A") & (~day_df["Code"].isin(used))].nlargest(1, "avg_score")
-        used.update(a["Code"])
-        b = day_df[(day_df["grade"] == "B") & (~day_df["Code"].isin(used))].nlargest(1, "avg_score")
-        daily_picks.append(pd.concat([v, s, a, b]))
-    if not daily_picks:
+    # 일자별 → 등급별 픽 (모두 표시 모드)
+    picks_df = _vsab_pick_daily(df)
+    if picks_df.empty:
         st.caption("선택된 픽 없음")
         return
-    picks_df = pd.concat(daily_picks, ignore_index=True)
+    picks_df["YearMonth"] = picks_df["Date"].dt.to_period("M").astype(str)
 
     # 비중 부여
     picks_df["weight"] = picks_df["grade"].map(GRADE_WEIGHTS)
-    # 손익 = ret_120d / 100 * weight (보유기간 120일 PnL 기준; 180일은 데이터 부족 → 120일로 표시)
-    if "ret_120d" not in picks_df.columns:
-        st.caption("ret_120d 없음")
-        return
-    picks_df["pnl"] = picks_df["ret_120d"].fillna(0) / 100 * picks_df["weight"]
+    # 손익 = ret / 100 * weight
+    if ret_col not in picks_df.columns:
+        # ret_180d 없으면 ret_120d로 fallback
+        if "ret_120d" in picks_df.columns:
+            ret_col = "ret_120d"
+        else:
+            st.caption(f"{ret_col} 없음")
+            return
+    picks_df["pnl"] = picks_df[ret_col].fillna(0) / 100 * picks_df["weight"]
 
     # 월별 집계
     monthly = picks_df.groupby(["YearMonth", "grade"]).agg(
         n=("Code", "count"),
         total_pnl=("pnl", "sum"),
-        avg_ret=("ret_120d", "mean"),
+        avg_ret=(ret_col, "mean"),
     ).reset_index()
 
     months = sorted(picks_df["YearMonth"].unique())
@@ -2093,17 +2103,35 @@ def render_vsab_monthly_pnl(df_graded: pd.DataFrame):
     st.markdown(table_html, unsafe_allow_html=True)
 
 
-def render_vsab_daily_signals(df_graded: pd.DataFrame, max_days: int = 50):
-    """일자별 V/S/A/B 등급별 종목 리스트."""
+def render_vsab_daily_signals(df_graded: pd.DataFrame, max_days: int = 50,
+                                ret_col: str = "ret_180d",
+                                sort_mode: str = "newest"):
+    """일자별 V/S/A/B 등급별 종목 리스트. 모든 등급의 모든 종목 표시.
+
+    sort_mode: 'newest' / 'oldest' / 'return_desc' / 'return_asc' / 'score_desc'
+    """
     if df_graded.empty:
         st.caption("데이터 없음")
         return
 
     df = df_graded[df_graded["grade"].notna()].copy()
     df["Date"] = pd.to_datetime(df["Date"])
+    if ret_col not in df.columns:
+        # fallback
+        if "ret_120d" in df.columns:
+            ret_col = "ret_120d"
 
-    # 일자별로 V/S/A/B 픽 빌드
-    dates = sorted(df["Date"].unique(), reverse=True)
+    # 정렬
+    if sort_mode == "newest":
+        dates = sorted(df["Date"].unique(), reverse=True)
+    elif sort_mode == "oldest":
+        dates = sorted(df["Date"].unique())
+    elif sort_mode in ("return_desc", "return_asc", "score_desc"):
+        # 거래별 정렬: 모든 픽을 한 표로
+        return _render_vsab_flat_table(df, ret_col, sort_mode, max_days)
+    else:
+        dates = sorted(df["Date"].unique(), reverse=True)
+
     KOREAN_DOW = ["월", "화", "수", "목", "금", "토", "일"]
     grade_pri = {"V": 4, "S": 3, "A": 2, "B": 1}
 
@@ -2113,12 +2141,12 @@ def render_vsab_daily_signals(df_graded: pd.DataFrame, max_days: int = 50):
         day_df = df[df["Date"] == d].copy()
         day_df["_pri"] = day_df["grade"].map(grade_pri).fillna(0)
         day_df = day_df.sort_values("_pri", ascending=False).drop_duplicates("Code", keep="first")
-        v = day_df[day_df["grade"] == "V"].nlargest(3, "avg_score")
-        s = day_df[day_df["grade"] == "S"].nlargest(3, "avg_score")
+        v = day_df[day_df["grade"] == "V"].nlargest(10, "avg_score")
+        s = day_df[day_df["grade"] == "S"].nlargest(10, "avg_score")
         used = set(v["Code"]).union(set(s["Code"]))
-        a = day_df[(day_df["grade"] == "A") & (~day_df["Code"].isin(used))].nlargest(1, "avg_score")
+        a = day_df[(day_df["grade"] == "A") & (~day_df["Code"].isin(used))].nlargest(10, "avg_score")
         used.update(a["Code"])
-        b = day_df[(day_df["grade"] == "B") & (~day_df["Code"].isin(used))].nlargest(1, "avg_score")
+        b = day_df[(day_df["grade"] == "B") & (~day_df["Code"].isin(used))].nlargest(5, "avg_score")
         picks = pd.concat([v, s, a, b])
         if picks.empty: continue
 
@@ -2133,7 +2161,6 @@ def render_vsab_daily_signals(df_graded: pd.DataFrame, max_days: int = 50):
             unsafe_allow_html=True,
         )
 
-        # 등급별 행 표시
         rows_html = ""
         UP = "#FF3B30"; DOWN = "#0066FF"
         for grade in ["V", "S", "A", "B"]:
@@ -2148,7 +2175,7 @@ def render_vsab_daily_signals(df_graded: pd.DataFrame, max_days: int = 50):
                 )
                 continue
             for _, r in sub.iterrows():
-                ret = r.get("ret_120d", 0) or 0
+                ret = r.get(ret_col, 0) or 0
                 ret_color = UP if ret > 0 else (DOWN if ret < 0 else "var(--text)")
                 rows_html += "<tr>"
                 rows_html += (
@@ -2171,6 +2198,7 @@ def render_vsab_daily_signals(df_graded: pd.DataFrame, max_days: int = 50):
                     rows_html += f'<td style="padding:8px;text-align:right;color:var(--text-3);">—</td>'
                 rows_html += "</tr>"
 
+        ret_label = "180일" if ret_col == "ret_180d" else ret_col.replace("ret_", "").replace("d", "일")
         st.markdown(
             '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px;">'
             '<table style="width:100%;border-collapse:collapse;font-size:12px;">'
@@ -2181,7 +2209,7 @@ def render_vsab_daily_signals(df_graded: pd.DataFrame, max_days: int = 50):
             '<th style="padding:10px;text-align:right;">당일</th>'
             '<th style="padding:10px;text-align:center;">점수</th>'
             '<th style="padding:10px;text-align:center;">프리셋</th>'
-            '<th style="padding:10px;text-align:right;">120일</th>'
+            f'<th style="padding:10px;text-align:right;">{ret_label}수익</th>'
             '</tr></thead>'
             f'<tbody>{rows_html}</tbody></table></div>',
             unsafe_allow_html=True,
@@ -2189,31 +2217,82 @@ def render_vsab_daily_signals(df_graded: pd.DataFrame, max_days: int = 50):
         shown += 1
 
 
-def _render_vsab_summary(df_graded: pd.DataFrame):
-    """선택 기간 통계 요약 — 등급별 / 전체."""
+def _render_vsab_flat_table(df: pd.DataFrame, ret_col: str, sort_mode: str, max_rows: int):
+    """수익률/점수순으로 평면 정렬한 표."""
+    picks = _vsab_pick_daily(df)
+    if picks.empty:
+        st.caption("선택된 픽 없음")
+        return
+    if ret_col not in picks.columns:
+        ret_col = "ret_120d"
+
+    if sort_mode == "return_desc":
+        picks = picks.sort_values(ret_col, ascending=False, na_position="last")
+    elif sort_mode == "return_asc":
+        picks = picks.sort_values(ret_col, ascending=True, na_position="last")
+    elif sort_mode == "score_desc":
+        picks = picks.sort_values("avg_score", ascending=False)
+
+    picks = picks.head(max_rows * 10)  # 일자별 평균 4건 가정
+    rows_html = ""
+    UP = "#FF3B30"; DOWN = "#0066FF"
+    for _, r in picks.iterrows():
+        grade = r["grade"]
+        info = GRADE_INFO[grade]
+        ret = r.get(ret_col, 0) or 0
+        ret_color = UP if ret > 0 else (DOWN if ret < 0 else "var(--text)")
+        date_str = pd.Timestamp(r["Date"]).strftime("%Y-%m-%d")
+        rows_html += "<tr>"
+        rows_html += f'<td style="padding:8px;font-weight:700;">{date_str}</td>'
+        rows_html += f'<td style="padding:8px;font-weight:800;color:{info["color"]};">{info["emoji"]} {grade}</td>'
+        rows_html += (
+            f'<td style="padding:8px;">'
+            f'<div style="font-weight:700;">{r["Name"]}</div>'
+            f'<div style="font-size:10px;color:var(--text-3);">{r["Code"]}</div>'
+            f'</td>'
+        )
+        rows_html += f'<td style="padding:8px;text-align:right;">{int(r["Close"]):,}원</td>'
+        rows_html += f'<td style="padding:8px;text-align:right;color:{UP if r["ChangeRatio"] > 0 else DOWN};font-weight:700;">{r["ChangeRatio"]:+.2f}%</td>'
+        rows_html += f'<td style="padding:8px;text-align:center;">{r["avg_score"]:.1f}</td>'
+        if pd.notna(ret) and ret != 0:
+            rows_html += f'<td style="padding:8px;text-align:right;color:{ret_color};font-weight:700;">{ret:+.1f}%</td>'
+        else:
+            rows_html += f'<td style="padding:8px;text-align:right;color:var(--text-3);">—</td>'
+        rows_html += "</tr>"
+
+    ret_label = "180일" if ret_col == "ret_180d" else ret_col.replace("ret_", "").replace("d", "일")
+    st.markdown(
+        '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px;">'
+        '<table style="width:100%;border-collapse:collapse;font-size:12px;">'
+        '<thead><tr style="background:var(--surface-alt);">'
+        '<th style="padding:10px;text-align:left;">날짜</th>'
+        '<th style="padding:10px;text-align:left;">등급</th>'
+        '<th style="padding:10px;text-align:left;">종목</th>'
+        '<th style="padding:10px;text-align:right;">매수가</th>'
+        '<th style="padding:10px;text-align:right;">당일</th>'
+        '<th style="padding:10px;text-align:center;">점수</th>'
+        f'<th style="padding:10px;text-align:right;">{ret_label}수익</th>'
+        '</tr></thead>'
+        f'<tbody>{rows_html}</tbody></table></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def _render_vsab_summary(df_graded: pd.DataFrame, ret_col: str = "ret_180d"):
+    """선택 기간 통계 요약 — 등급별 / 전체. 모든 종목 표시 모드."""
     if df_graded.empty:
         return
     df = df_graded[df_graded["grade"].notna()].copy()
-    grade_pri = {"V": 4, "S": 3, "A": 2, "B": 1}
 
-    # 일자별 버킷 빌드 (중복 제거 후)
-    picks = []
-    for date, day_df in df.groupby("Date"):
-        day_df = day_df.copy()
-        day_df["_pri"] = day_df["grade"].map(grade_pri).fillna(0)
-        day_df = day_df.sort_values("_pri", ascending=False).drop_duplicates("Code", keep="first")
-        v = day_df[day_df["grade"] == "V"].nlargest(3, "avg_score")
-        s = day_df[day_df["grade"] == "S"].nlargest(3, "avg_score")
-        used = set(v["Code"]).union(set(s["Code"]))
-        a = day_df[(day_df["grade"] == "A") & (~day_df["Code"].isin(used))].nlargest(1, "avg_score")
-        used.update(a["Code"])
-        b = day_df[(day_df["grade"] == "B") & (~day_df["Code"].isin(used))].nlargest(1, "avg_score")
-        picks.append(pd.concat([v, s, a, b]))
-    if not picks:
+    # 일자별 버킷 빌드 (모든 등급 모두 표시)
+    pdf = _vsab_pick_daily(df)
+    if pdf.empty:
         return
-    pdf = pd.concat(picks, ignore_index=True)
+    if ret_col not in pdf.columns:
+        ret_col = "ret_120d" if "ret_120d" in pdf.columns else None
+        if ret_col is None: return
     pdf["weight"] = pdf["grade"].map(GRADE_WEIGHTS)
-    pdf["pnl"] = pdf["ret_120d"].fillna(0) / 100 * pdf["weight"]
+    pdf["pnl"] = pdf[ret_col].fillna(0) / 100 * pdf["weight"]
 
     # 등급별 통계 카드
     UP = "#FF3B30"; DOWN = "#0066FF"
@@ -2232,7 +2311,7 @@ def _render_vsab_summary(df_graded: pd.DataFrame):
                 f'</tr>'
             )
             continue
-        rets = sub["ret_120d"].dropna()
+        rets = sub[ret_col].dropna()
         avg = rets.mean() if len(rets) > 0 else 0
         wr = (rets > 0).mean() * 100 if len(rets) > 0 else 0
         big_win = (rets >= 50).mean() * 100 if len(rets) > 0 else 0
@@ -2261,7 +2340,7 @@ def _render_vsab_summary(df_graded: pd.DataFrame):
         rows += "</tr>"
 
     # 합계
-    avg_overall = pdf["ret_120d"].dropna().mean() if not pdf["ret_120d"].dropna().empty else 0
+    avg_overall = pdf[ret_col].dropna().mean() if not pdf[ret_col].dropna().empty else 0
     rows += "<tr style='border-top:2px solid var(--border);background:var(--surface-alt);'>"
     rows += f'<td style="padding:12px;font-weight:800;">전체</td>'
     rows += f'<td style="padding:12px;text-align:center;font-weight:800;">{total_n}</td>'
@@ -2298,12 +2377,13 @@ def _render_vsab_summary(df_graded: pd.DataFrame):
     pdf_export["매수일"] = pdf_export["Date"].dt.strftime("%Y-%m-%d")
     cols_export = ["매수일", "grade", "Name", "Code", "Market",
                     "Close", "ChangeRatio", "avg_score", "n_presets",
-                    "weight", "ret_120d", "pnl"]
+                    "weight", ret_col, "pnl"]
     cols_export = [c for c in cols_export if c in pdf_export.columns]
+    ret_label_kr = "180일수익률" if ret_col == "ret_180d" else f"{ret_col.replace('ret_','').replace('d','일')}수익률"
     rename = {"grade": "등급", "Name": "종목명", "Code": "코드", "Market": "시장",
                 "Close": "매수가", "ChangeRatio": "당일등락",
                 "avg_score": "앙상블점수", "n_presets": "추천프리셋수",
-                "weight": "매수금액", "ret_120d": "120일수익률", "pnl": "손익"}
+                "weight": "매수금액", ret_col: ret_label_kr, "pnl": "손익"}
     pdf_export = pdf_export[cols_export].rename(columns=rename)
     csv = pdf_export.to_csv(index=False).encode("utf-8-sig")
     st.download_button("📥 선택 기간 종목 전체 CSV", csv,
@@ -2344,6 +2424,15 @@ def page_results():
         st.session_state.vsab_years = list(available_years)
     if "vsab_months" not in st.session_state:
         st.session_state.vsab_months = list(range(1, 13))
+    if "vsab_applied_years" not in st.session_state:
+        st.session_state.vsab_applied_years = list(available_years)
+    if "vsab_applied_months" not in st.session_state:
+        st.session_state.vsab_applied_months = list(range(1, 13))
+    if "vsab_sort" not in st.session_state:
+        st.session_state.vsab_sort = "newest"
+    if "vsab_hold" not in st.session_state:
+        # 180일이 있으면 기본 180, 없으면 120
+        st.session_state.vsab_hold = "180" if "ret_180d" in df_graded.columns else "120"
 
     st.markdown('<h3 style="margin-bottom:8px;">📅 기간 선택</h3>', unsafe_allow_html=True)
     st.caption("선택한 년/월의 V/S/A/B 추천만 표시 — 다중 선택 가능")
@@ -2408,11 +2497,53 @@ def page_results():
                     st.session_state.vsab_months.sort()
                 st.rerun()
 
-    # 필터 적용
-    sel_years = st.session_state.vsab_years
-    sel_months = st.session_state.vsab_months
+    # ============================================================
+    # 보유기간 + 정렬 + 필터 적용 버튼
+    # ============================================================
+    st.markdown('<div style="height:18px;"></div>', unsafe_allow_html=True)
+    hold_opts = ["180", "120", "90", "60", "30", "20"]
+    if "ret_180d" not in df_graded.columns:
+        hold_opts = ["120", "90", "60", "30", "20"]
+    sort_opts = {
+        "newest": "📅 최신순",
+        "oldest": "📅 오래된순",
+        "return_desc": "🔴 수익률 높은순",
+        "return_asc": "🔵 수익률 낮은순",
+        "score_desc": "⭐ 점수 높은순",
+    }
+    cc1, cc2, cc3 = st.columns([1, 2, 2])
+    with cc1:
+        st.markdown('<div style="font-size:13px;color:var(--text-2);font-weight:700;'
+                     'margin-bottom:6px;">보유기간</div>',
+                     unsafe_allow_html=True)
+        hold = st.selectbox("보유", hold_opts,
+                              index=hold_opts.index(st.session_state.vsab_hold) if st.session_state.vsab_hold in hold_opts else 0,
+                              label_visibility="collapsed", key="vsab_hold_select")
+        st.session_state.vsab_hold = hold
+    with cc2:
+        st.markdown('<div style="font-size:13px;color:var(--text-2);font-weight:700;'
+                     'margin-bottom:6px;">정렬</div>',
+                     unsafe_allow_html=True)
+        sort_key = st.selectbox("정렬", list(sort_opts.keys()),
+                                  format_func=lambda k: sort_opts[k],
+                                  index=list(sort_opts.keys()).index(st.session_state.vsab_sort),
+                                  label_visibility="collapsed", key="vsab_sort_select")
+        st.session_state.vsab_sort = sort_key
+    with cc3:
+        st.markdown('<div style="font-size:13px;color:var(--text-2);font-weight:700;'
+                     'margin-bottom:6px;">&nbsp;</div>',
+                     unsafe_allow_html=True)
+        if st.button("✅ 필터 적용하기", type="primary", use_container_width=True,
+                       key="vsab_apply_filter"):
+            st.session_state.vsab_applied_years = list(st.session_state.vsab_years)
+            st.session_state.vsab_applied_months = list(st.session_state.vsab_months)
+            st.rerun()
+
+    # 실제 적용된 값 사용
+    sel_years = st.session_state.vsab_applied_years
+    sel_months = st.session_state.vsab_applied_months
     if not sel_years or not sel_months:
-        st.warning("⚠️ 년도와 월을 최소 1개씩 선택해주세요.")
+        st.warning("⚠️ 년도와 월을 최소 1개씩 선택 후 [✅ 필터 적용하기] 버튼을 눌러주세요.")
         return
 
     df_filtered = df_graded[
@@ -2434,22 +2565,33 @@ def page_results():
     if df_filtered.empty:
         st.info("선택된 기간에 V/S/A/B 후보가 없습니다.")
     else:
-        # 월별 손익
-        st.markdown("<h2>💰 V/S/A/B 등급별 월별 손익</h2>", unsafe_allow_html=True)
-        st.caption("등급별 비중 적용 (V:50만/S:30만/A:20만/B:10만) · 120일 보유 손익 · 이상치 미제거")
-        render_vsab_monthly_pnl(df_filtered)
+        ret_col = f"ret_{st.session_state.vsab_hold}d"
+        hold_label = st.session_state.vsab_hold
 
-        # 등급별 종목 리스트 — 전체 보이기 (페이지네이션 X)
+        # 월별 손익
+        st.markdown(f"<h2>💰 V/S/A/B 등급별 월별 손익 ({hold_label}일 보유)</h2>",
+                     unsafe_allow_html=True)
+        st.caption("등급별 비중 적용 (V:50만/S:30만/A:20만/B:10만) · 이상치 미제거 · "
+                    "모든 등급 매일 다 추천 종목 합산")
+        render_vsab_monthly_pnl(df_filtered, ret_col=ret_col)
+
+        # 등급별 종목 리스트 — 전체 보이기
         st.markdown("<div style='height:32px;'></div>", unsafe_allow_html=True)
-        st.markdown("<h2>📋 일자별 등급별 추천 종목 — 전체</h2>", unsafe_allow_html=True)
-        st.caption(f"V/S는 점수 상위 3개, A/B는 점수 1위 · 선택된 기간 전체 표시 (최신순)")
-        # max_days = 충분히 큰 값으로 (사실상 전체)
-        render_vsab_daily_signals(df_filtered, max_days=10000)
+        sort_kr = {"newest":"최신순","oldest":"오래된순","return_desc":"수익률↓",
+                    "return_asc":"수익률↑","score_desc":"점수↓"}[st.session_state.vsab_sort]
+        st.markdown(f"<h2>📋 일자별 등급별 추천 종목 — {sort_kr}</h2>",
+                     unsafe_allow_html=True)
+        st.caption(f"V/S/A/B 모두 매일 조건 만족 종목 다 표시 (없는 등급은 '없음' 표시) · "
+                    f"{hold_label}일 수익률 기준")
+        render_vsab_daily_signals(df_filtered, max_days=10000,
+                                    ret_col=ret_col,
+                                    sort_mode=st.session_state.vsab_sort)
 
         # 통계 요약
         st.markdown("<div style='height:32px;'></div>", unsafe_allow_html=True)
-        st.markdown("<h2>📊 선택 기간 통계 요약</h2>", unsafe_allow_html=True)
-        _render_vsab_summary(df_filtered)
+        st.markdown(f"<h2>📊 선택 기간 통계 요약 ({hold_label}일 기준)</h2>",
+                     unsafe_allow_html=True)
+        _render_vsab_summary(df_filtered, ret_col=ret_col)
 
     st.markdown("<div style='height:48px;'></div>", unsafe_allow_html=True)
     st.markdown("---")

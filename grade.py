@@ -128,12 +128,13 @@ def classify_candidates(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def build_grade_buckets(df: pd.DataFrame, vs_max: int = 3,
-                         ab_only_top1: bool = True) -> Dict[str, pd.DataFrame]:
+def build_grade_buckets(df: pd.DataFrame, vs_max: int = 10,
+                         a_max: int = 10, b_max: int = 5,
+                         show_all: bool = True) -> Dict[str, pd.DataFrame]:
     """등급별로 종목 묶기.
 
-    - V/S: 각 등급 안에서 점수 평균 상위 vs_max 개까지 (기본 3)
-    - A/B: 각 등급 안에서 점수 1위 1개만 (V/S에 채택된 종목은 제외)
+    show_all=True (기본): 각 등급 안에서 조건 만족한 모든 종목 표시 (vs_max/a_max/b_max 한도 내)
+    show_all=False: V/S는 vs_max, A/B는 1개
     """
     df = df.copy()
     if "avg_score" not in df.columns and "Score" in df.columns:
@@ -141,27 +142,31 @@ def build_grade_buckets(df: pd.DataFrame, vs_max: int = 3,
 
     buckets = {}
 
-    # V급 (TOP N)
+    # V급
     v = df[df["grade"] == "V"].sort_values("avg_score", ascending=False).head(vs_max)
     buckets["V"] = v
-
-    # S급 (V 종목 제외, TOP N)
     used_codes = set(v.get("Code", pd.Series()).tolist())
+
+    # S급 (V 제외)
     s = df[(df["grade"] == "S") & (~df["Code"].isin(used_codes))]
     s = s.sort_values("avg_score", ascending=False).head(vs_max)
     buckets["S"] = s
     used_codes.update(s.get("Code", pd.Series()).tolist())
 
-    # A급 (V/S 제외, 1개)
+    # A급 (V/S 제외)
     a = df[(df["grade"] == "A") & (~df["Code"].isin(used_codes))]
-    if ab_only_top1:
+    if show_all:
+        a = a.sort_values("avg_score", ascending=False).head(a_max)
+    else:
         a = a.sort_values("avg_score", ascending=False).head(1)
     buckets["A"] = a
     used_codes.update(a.get("Code", pd.Series()).tolist())
 
-    # B급 (V/S/A 제외, 1개)
+    # B급 (V/S/A 제외)
     b = df[(df["grade"] == "B") & (~df["Code"].isin(used_codes))]
-    if ab_only_top1:
+    if show_all:
+        b = b.sort_values("avg_score", ascending=False).head(b_max)
+    else:
         b = b.sort_values("avg_score", ascending=False).head(1)
     buckets["B"] = b
 
