@@ -31,22 +31,43 @@ from pattern_detector import diagnose_all_patterns
 
 
 def get_market_snapshot(filter_cfg: FilterConfig) -> pd.DataFrame:
-    """오늘(가장 최근 거래일) 전체 시장 스냅샷에서 1차 필터 적용."""
-    frames = []
-    if filter_cfg.include_kospi:
-        df = fdr.StockListing("KOSPI").assign(Market="KOSPI")
-        frames.append(df)
-    if filter_cfg.include_kosdaq:
-        df = fdr.StockListing("KOSDAQ").assign(Market="KOSDAQ")
-        frames.append(df)
-    if not frames:
-        return pd.DataFrame()
+    """오늘(가장 최근 거래일) 전체 시장 스냅샷에서 1차 필터 적용.
 
-    all_df = pd.concat(frames, ignore_index=True)
+    1순위: fdr.StockListing (한국 IP만 작동, 실시간)
+    2순위: cache/market_snapshot.parquet (매일 업데이트되는 캐시, 어느 IP에서도)
+    """
+    from pathlib import Path
+    cache_path = Path("cache/market_snapshot.parquet")
 
-    # 컬럼 표준화
-    rename_map = {"ChagesRatio": "ChangeRatio", "Marcap": "MarketCap"}
-    all_df = all_df.rename(columns=rename_map)
+    # 1순위: 실시간 (한국 IP)
+    try:
+        frames = []
+        if filter_cfg.include_kospi:
+            df = fdr.StockListing("KOSPI").assign(Market="KOSPI")
+            frames.append(df)
+        if filter_cfg.include_kosdaq:
+            df = fdr.StockListing("KOSDAQ").assign(Market="KOSDAQ")
+            frames.append(df)
+        if not frames:
+            return pd.DataFrame()
+        all_df = pd.concat(frames, ignore_index=True)
+        rename_map = {"ChagesRatio": "ChangeRatio", "Marcap": "MarketCap"}
+        all_df = all_df.rename(columns=rename_map)
+    except Exception as e:
+        # 2순위: 캐시 (해외 IP 등)
+        if not cache_path.exists():
+            raise RuntimeError(
+                f"실시간 데이터 가져오기 실패 + 캐시 없음. "
+                f"한국 IP에서 `python3 daily_update.py` 실행 필요. ({e})"
+            ) from e
+        all_df = pd.read_parquet(cache_path)
+        # 필터 적용
+        markets = []
+        if filter_cfg.include_kospi: markets.append("KOSPI")
+        if filter_cfg.include_kosdaq: markets.append("KOSDAQ")
+        all_df = all_df[all_df["Market"].isin(markets)]
+        if all_df.empty:
+            return pd.DataFrame()
 
     # ETF/ETN/SPAC 등 제외 (이름 기반 휴리스틱)
     if filter_cfg.exclude_etf:
@@ -64,26 +85,62 @@ def get_market_snapshot(filter_cfg: FilterConfig) -> pd.DataFrame:
     return filtered.reset_index(drop=True)
 
 
+# OHLCV 캐시 (메모리)
+_OHLCV_CACHE_PKL: Optional[Dict[str, pd.DataFrame]] = None
+
+
+def _load_ohlcv_cache_pkl() -> Dict[str, pd.DataFrame]:
+    """ohlcv_*.pkl 캐시를 메모리에 로딩 (한 번만)."""
+    global _OHLCV_CACHE_PKL
+    if _OHLCV_CACHE_PKL is not None:
+        return _OHLCV_CACHE_PKL
+    import pickle
+    from pathlib import Path as _P
+    cache_dir = _P("cache")
+    pkls = sorted(cache_dir.glob("ohlcv_*.pkl"), key=lambda p: p.stat().st_mtime, reverse=True)
+    for p in pkls:
+        try:
+            with open(p, "rb") as f:
+                _OHLCV_CACHE_PKL = pickle.load(f)
+            return _OHLCV_CACHE_PKL
+        except Exception:
+            continue
+    _OHLCV_CACHE_PKL = {}
+    return _OHLCV_CACHE_PKL
+
+
 def fetch_ohlcv(code: str, days: int = 90, end_date: Optional[str] = None,
                   fast: bool = True) -> Optional[pd.DataFrame]:
     """단일 종목 과거 OHLCV. 실패 시 None.
 
-    fast=True (기본): 약 250일치만 (S9 480일 이평 미사용, 1분 내 스캔용)
-    fast=False: 500일+ (S9 장기 이평 480일 계산 가능, 정확한 백테스트용)
+    1순위: fdr.DataReader (한국 IP만 작동, 실시간)
+    2순위: cache/ohlcv_*.pkl (캐시 데이터, 최근 1주일 ~ 며칠 지연)
     """
+    end = pd.to_datetime(end_date) if end_date else datetime.now()
+    if fast:
+        lookback = max(days, 250) + 10
+    else:
+        lookback = max(days, 500) + 30
+    start = end - timedelta(days=lookback)
+
+    # 1순위: 실시간
     try:
-        end = pd.to_datetime(end_date) if end_date else datetime.now()
-        if fast:
-            lookback = max(days, 250) + 10  # 빠른 모드
-        else:
-            lookback = max(days, 500) + 30
-        start = end - timedelta(days=lookback)
         df = fdr.DataReader(code, start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d"))
-        if df is None or df.empty:
-            return None
-        return df
+        if df is not None and not df.empty:
+            return df
     except Exception:
+        pass
+
+    # 2순위: 캐시
+    cache = _load_ohlcv_cache_pkl()
+    cached = cache.get(code)
+    if cached is None or cached.empty:
         return None
+    # 기간 컷
+    sub = cached[(cached.index >= start) & (cached.index <= end)]
+    if sub.empty:
+        return cached.tail(min(len(cached), int(lookback)))  # 최근 캐시 데이터라도 반환
+    return sub
 
 
 # 시장 벤치마크 캐시 (상대강도 계산용)
