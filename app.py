@@ -603,15 +603,40 @@ def page_today():
         type="primary", use_container_width=True, key="main_scan",
     )
 
-    # 안내 — 한국 IP 필요성
-    st.markdown(
-        f'<div style="background:rgba(255,193,7,0.10);border:1px solid rgba(255,193,7,0.40);'
-        f'border-radius:8px;padding:10px 14px;margin:10px 0 18px 0;font-size:12px;color:{p["text_secondary"]};">'
-        f'⚠️ <b>한국 IP에서만 작동</b>합니다. KRX 데이터를 직접 가져오기 때문에 '
-        f'해외 서버에서는 접속이 차단됩니다.'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
+    # 데이터 소스 상태 확인
+    try:
+        import kis_api
+        kis_ok = kis_api.is_available()
+    except Exception:
+        kis_ok = False
+    from pathlib import Path
+    cache_ok = Path("cache/market_snapshot.parquet").exists()
+
+    if kis_ok:
+        st.markdown(
+            f'<div style="background:rgba(33,150,243,0.10);border:1px solid rgba(33,150,243,0.40);'
+            f'border-radius:8px;padding:10px 14px;margin:10px 0 18px 0;font-size:12px;color:{p["text_secondary"]};">'
+            f'🟦 <b>한국투자 OpenAPI 연결됨</b> — 어디서나 실시간 데이터 사용 가능'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    elif cache_ok:
+        st.markdown(
+            f'<div style="background:rgba(102,187,106,0.10);border:1px solid rgba(102,187,106,0.40);'
+            f'border-radius:8px;padding:10px 14px;margin:10px 0 18px 0;font-size:12px;color:{p["text_secondary"]};">'
+            f'🟢 <b>캐시 데이터 사용 가능</b> (어제 마감 기준, 매일 자동 갱신) · '
+            f'한국 IP면 실시간 시도 후 실패 시 캐시 fallback'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            f'<div style="background:rgba(255,193,7,0.10);border:1px solid rgba(255,193,7,0.40);'
+            f'border-radius:8px;padding:10px 14px;margin:10px 0 18px 0;font-size:12px;color:{p["text_secondary"]};">'
+            f'⚠️ 캐시 없음 + KIS API 미설정. 한국 IP에서만 작동.'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
     if do_scan:
         filter_cfg, _, params, _ = build_configs()
@@ -650,15 +675,17 @@ def page_today():
         except Exception as e:
             progress.empty()
             st.error(
-                f"⚠️ **실시간 스캔 실패** — KRX 서버 접근 불가\n\n"
-                f"이 사이트는 **클라우드 서버**(미국 IP)에서 호스팅되어 한국 KRX 데이터를 가져올 수 없습니다.\n\n"
-                f"**👉 로컬 PC에서 사용하세요:**\n"
-                f"```\n"
-                f"git clone https://github.com/neo9999999999/neo0300\n"
-                f"cd neo0300\n"
-                f"pip install -r requirements.txt\n"
-                f"streamlit run app.py\n"
-                f"```\n\n"
+                f"⚠️ **스캔 실패**\n\n"
+                f"**해결책 (가장 빠른 길):**\n\n"
+                f"1️⃣ **한국투자 OpenAPI 키 설정** (영구 해결)\n"
+                f"   - https://apiportal.koreainvestment.com 가입\n"
+                f"   - 앱 등록 → APP_KEY, APP_SECRET 발급\n"
+                f"   - Streamlit Cloud → Settings → Secrets 에 추가:\n"
+                f"     ```\n"
+                f"     KIS_APP_KEY = \"...\"\n"
+                f"     KIS_APP_SECRET = \"...\"\n"
+                f"     ```\n"
+                f"2️⃣ 또는 로컬 PC에서 `streamlit run app.py` (한국 IP)\n\n"
                 f"에러: `{type(e).__name__}: {str(e)[:200]}`"
             )
 

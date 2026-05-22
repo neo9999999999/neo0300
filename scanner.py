@@ -33,35 +33,55 @@ from pattern_detector import diagnose_all_patterns
 def get_market_snapshot(filter_cfg: FilterConfig) -> pd.DataFrame:
     """오늘(가장 최근 거래일) 전체 시장 스냅샷에서 1차 필터 적용.
 
-    1순위: fdr.StockListing (한국 IP만 작동, 실시간)
-    2순위: cache/market_snapshot.parquet (매일 업데이트되는 캐시, 어느 IP에서도)
+    1순위: KIS API (한국투자증권 OpenAPI) — 키 설정 시
+    2순위: fdr.StockListing (한국 IP만 작동, 실시간)
+    3순위: cache/market_snapshot.parquet (매일 업데이트되는 캐시, 어느 IP에서도)
     """
     from pathlib import Path
     cache_path = Path("cache/market_snapshot.parquet")
+    all_df = None
 
-    # 1순위: 실시간 (한국 IP)
+    # 1순위: KIS API (한국투자증권)
     try:
-        frames = []
-        if filter_cfg.include_kospi:
-            df = fdr.StockListing("KOSPI").assign(Market="KOSPI")
-            frames.append(df)
-        if filter_cfg.include_kosdaq:
-            df = fdr.StockListing("KOSDAQ").assign(Market="KOSDAQ")
-            frames.append(df)
-        if not frames:
-            return pd.DataFrame()
-        all_df = pd.concat(frames, ignore_index=True)
-        rename_map = {"ChagesRatio": "ChangeRatio", "Marcap": "MarketCap"}
-        all_df = all_df.rename(columns=rename_map)
-    except Exception as e:
-        # 2순위: 캐시 (해외 IP 등)
+        import kis_api
+        if kis_api.is_available():
+            kospi = kis_api.get_change_rank("KOSPI", top=300) if filter_cfg.include_kospi else pd.DataFrame()
+            kosdaq = kis_api.get_change_rank("KOSDAQ", top=300) if filter_cfg.include_kosdaq else pd.DataFrame()
+            cand = pd.concat([kospi, kosdaq], ignore_index=True) if (not kospi.empty or not kosdaq.empty) else pd.DataFrame()
+            if not cand.empty:
+                # MarketCap은 KIS 등락률 순위에서 안 줌 → 시총 필터는 캐시에서 채우기
+                if cache_path.exists():
+                    ms = pd.read_parquet(cache_path)[["Code", "MarketCap"]]
+                    cand = cand.merge(ms, on="Code", how="left")
+                else:
+                    cand["MarketCap"] = filter_cfg.min_marcap  # 통과시킴
+                all_df = cand
+    except Exception:
+        pass
+
+    # 2순위: fdr (한국 IP)
+    if all_df is None:
+        try:
+            frames = []
+            if filter_cfg.include_kospi:
+                df = fdr.StockListing("KOSPI").assign(Market="KOSPI")
+                frames.append(df)
+            if filter_cfg.include_kosdaq:
+                df = fdr.StockListing("KOSDAQ").assign(Market="KOSDAQ")
+                frames.append(df)
+            if frames:
+                all_df = pd.concat(frames, ignore_index=True)
+                rename_map = {"ChagesRatio": "ChangeRatio", "Marcap": "MarketCap"}
+                all_df = all_df.rename(columns=rename_map)
+        except Exception:
+            pass
+
+    # 3순위: 캐시
+    if all_df is None or all_df.empty:
         if not cache_path.exists():
-            raise RuntimeError(
-                f"실시간 데이터 가져오기 실패 + 캐시 없음. "
-                f"한국 IP에서 `python3 daily_update.py` 실행 필요. ({e})"
-            ) from e
+            # 빈 DataFrame 반환 — 호출 측에서 에러 메시지 표시
+            return pd.DataFrame()
         all_df = pd.read_parquet(cache_path)
-        # 필터 적용
         markets = []
         if filter_cfg.include_kospi: markets.append("KOSPI")
         if filter_cfg.include_kosdaq: markets.append("KOSDAQ")
@@ -123,7 +143,17 @@ def fetch_ohlcv(code: str, days: int = 90, end_date: Optional[str] = None,
         lookback = max(days, 500) + 30
     start = end - timedelta(days=lookback)
 
-    # 1순위: 실시간
+    # 1순위: KIS API
+    try:
+        import kis_api
+        if kis_api.is_available():
+            df = kis_api.get_ohlcv(code, days=int(lookback))
+            if df is not None and not df.empty:
+                return df
+    except Exception:
+        pass
+
+    # 2순위: fdr (한국 IP)
     try:
         df = fdr.DataReader(code, start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d"))
         if df is not None and not df.empty:
@@ -131,15 +161,14 @@ def fetch_ohlcv(code: str, days: int = 90, end_date: Optional[str] = None,
     except Exception:
         pass
 
-    # 2순위: 캐시
+    # 3순위: 캐시
     cache = _load_ohlcv_cache_pkl()
     cached = cache.get(code)
     if cached is None or cached.empty:
         return None
-    # 기간 컷
     sub = cached[(cached.index >= start) & (cached.index <= end)]
     if sub.empty:
-        return cached.tail(min(len(cached), int(lookback)))  # 최근 캐시 데이터라도 반환
+        return cached.tail(min(len(cached), int(lookback)))
     return sub
 
 
