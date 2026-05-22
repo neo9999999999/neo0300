@@ -890,7 +890,7 @@ def render_strategy_comparison(position_size: int = 100_000):
     # 중장기 보유 (참고)
     horizons_swing = [("💎 20일 보유", "ret_20d"), ("💎 30일 보유", "ret_30d"),
                        ("💎 60일 보유", "ret_60d"), ("💎 90일 보유", "ret_90d"),
-                       ("🥇 120일 보유", "ret_120d")]
+                       ("💎 120일 보유", "ret_120d"), ("🥇 180일 보유 ⭐", "ret_180d")]
     rows_html += (
         '<tr><td colspan="6" style="padding:8px 14px;background:var(--surface-alt);'
         'color:var(--text-2);font-weight:700;font-size:12px;">─ 참고: 중장기 보유 ─</td></tr>'
@@ -1195,7 +1195,8 @@ def render_comprehensive_guide(position_size: int = 1_000_000):
     df_all["Year"] = df_all["Date"].dt.year
 
     horizons = [("익일", "ret_d1_close"), ("20일", "ret_20d"), ("30일", "ret_30d"),
-                ("60일", "ret_60d"), ("90일", "ret_90d"), ("120일", "ret_120d")]
+                ("60일", "ret_60d"), ("90일", "ret_90d"), ("120일", "ret_120d"),
+                ("180일", "ret_180d")]
 
     def fmt_won(pnl):
         if pnl is None or pd.isna(pnl): return "—"
@@ -1382,6 +1383,7 @@ def render_year_horizon_matrix(trades_df, position_size: int = 1_000_000):
         ("60일", "ret_60d"),
         ("90일", "ret_90d"),
         ("120일", "ret_120d"),
+        ("180일 ⭐", "ret_180d"),
     ]
 
     df = trades_df.copy()

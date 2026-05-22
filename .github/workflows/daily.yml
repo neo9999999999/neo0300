@@ -34,14 +34,22 @@ jobs:
           python3 daily_update.py
           ls -la cache/
 
+      - name: Refresh enriched parquet (V/S/A/B 추천용)
+        run: |
+          # 기존 enriched 삭제 후 재계산 (단 V/S/A/B에 쓰는 4개만)
+          rm -f cache/enriched_default.parquet cache/enriched_box_breakout.parquet
+          rm -f cache/enriched_habarocell.parquet cache/enriched_pullback.parquet
+          python3 precompute_enriched.py || echo "precompute 실패 (skip)"
+          ls -la cache/enriched_*.parquet 2>&1 | head -10
+
       - name: Commit & push if changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add cache/market_snapshot.parquet cache/market_snapshot_meta.json cache/ohlcv_*.pkl || true
+          git add cache/market_snapshot.parquet cache/market_snapshot_meta.json cache/ohlcv_*.pkl cache/enriched_*.parquet || true
           if git diff --staged --quiet; then
             echo "변경사항 없음"
           else
-            git commit -m "auto: $(date -u +%Y-%m-%d) KRX 캐시 갱신 (GitHub Actions)"
+            git commit -m "auto: $(date -u +%Y-%m-%d) KRX 캐시 + V/S/A/B enriched 갱신 (GitHub Actions)"
             git push
           fi
