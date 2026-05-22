@@ -59,9 +59,12 @@ def get_market_snapshot(filter_cfg: FilterConfig) -> pd.DataFrame:
     except Exception:
         pass
 
-    # 2순위: fdr (한국 IP)
+    # 2순위: fdr (한국 IP) — 타임아웃 3초, 차단 시 즉시 fallback
     if all_df is None:
+        import socket
+        old_timeout = socket.getdefaulttimeout()
         try:
+            socket.setdefaulttimeout(3)
             frames = []
             if filter_cfg.include_kospi:
                 df = fdr.StockListing("KOSPI").assign(Market="KOSPI")
@@ -75,6 +78,8 @@ def get_market_snapshot(filter_cfg: FilterConfig) -> pd.DataFrame:
                 all_df = all_df.rename(columns=rename_map)
         except Exception:
             pass
+        finally:
+            socket.setdefaulttimeout(old_timeout)
 
     # 3순위: 캐시
     if all_df is None or all_df.empty:

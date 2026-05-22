@@ -155,8 +155,8 @@ def enrich_trades(df: pd.DataFrame, with_forward: bool = True) -> pd.DataFrame:
             df[f"ret_d1_{k}"] = df.apply(
                 lambda r, _k=k: forward_price_return(r["Code"], r["Date"], 1, _k), axis=1
             )
-        # 중기 스윙: 20/30/60/90/120/180일 종가
-        for d in [20, 30, 60, 90, 120, 180]:
+        # 중기/장기 스윙: 20~365일 종가
+        for d in [20, 30, 60, 90, 120, 180, 240, 365]:
             df[f"ret_{d}d"] = df.apply(
                 lambda r, _d=d: forward_price_return(r["Code"], r["Date"], _d, "close"), axis=1
             )
