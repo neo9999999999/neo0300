@@ -597,95 +597,70 @@ def page_today():
             )
             st.session_state[f"weight_{g}"] = v * 10000
 
-    # 📦 캐시 데이터 안내
+    # 메인 액션 — 실시간 스캔만
+    do_scan = st.button(
+        "🔍 지금 스캔하기 (실시간 · 1~2분)",
+        type="primary", use_container_width=True, key="main_scan",
+    )
+
+    # 안내 — 한국 IP 필요성
     st.markdown(
-        f'<div style="background:rgba(102,187,106,0.10);border:1px solid rgba(102,187,106,0.40);'
-        f'border-radius:10px;padding:12px 16px;margin:14px 0;font-size:13px;color:{p["text_secondary"]};">'
-        f'<b>📦 캐시 데이터란?</b> 2020~2026 미리 계산된 백테스트 후보 풀입니다. '
-        f'실시간 시세를 가져올 수 없는 환경(클라우드 등)에서도 작동. '
-        f'<b>실시간 스캔은 로컬 PC에서만 가능</b> (KRX 한국 IP 필요).'
+        f'<div style="background:rgba(255,193,7,0.10);border:1px solid rgba(255,193,7,0.40);'
+        f'border-radius:8px;padding:10px 14px;margin:10px 0 18px 0;font-size:12px;color:{p["text_secondary"]};">'
+        f'⚠️ <b>한국 IP에서만 작동</b>합니다. KRX 데이터를 직접 가져오기 때문에 '
+        f'해외 서버에서는 접속이 차단됩니다.'
         f'</div>',
         unsafe_allow_html=True,
     )
 
-    # 메인 액션
-    btn_col1, btn_col2 = st.columns([3, 2])
-    do_scan = btn_col1.button("🔍 실시간 스캔 (로컬 PC만, 4 프리셋 · 5~10분)",
-                                type="primary", use_container_width=True, key="main_scan")
-    use_cache = btn_col2.button("⚡ 캐시 데이터 사용",
-                                  use_container_width=True, key="cache_scan")
-
     if do_scan:
         filter_cfg, _, params, _ = build_configs()
+        # V/S/A/B 등급에 맞춰 사전 필터 강화 (후보 ↓ → 속도 ↑)
         filter_cfg.change_min = 7.0
         filter_cfg.change_max = 25.0
-        progress = st.progress(0, text="시장 데이터 + 시그널 계산 중...")
+        filter_cfg.include_kospi = False   # KOSDAQ만
+        filter_cfg.include_kosdaq = True
+        progress = st.progress(0, text="시장 데이터 가져오는 중...")
+        start_t = datetime.now()
+
         def cb(i, t):
-            progress.progress(min(i / t, 1.0), text=f"시그널 계산 {i}/{t}")
+            elapsed = (datetime.now() - start_t).total_seconds()
+            rate = i / elapsed if elapsed > 0 else 0
+            eta = (t - i) / rate if rate > 0 else 0
+            progress.progress(
+                min(i / t, 1.0),
+                text=f"⚡ {i}/{t} · 경과 {elapsed:.0f}초 · 남은시간 ~{eta:.0f}초",
+            )
+
         try:
-            with st.spinner("4 프리셋 통합 스캔 중..."):
-                ensemble = scan_ensemble(filter_cfg, params, PRESETS_4,
-                                           progress_callback=cb, min_recommend_score=40)
+            ensemble = scan_ensemble(
+                filter_cfg, params, PRESETS_4,
+                progress_callback=cb, min_recommend_score=40,
+            )
             progress.empty()
+            elapsed_total = (datetime.now() - start_t).total_seconds()
             if not ensemble.empty:
                 ensemble = ensemble[ensemble["Market"] == "KOSDAQ"]
                 if "TradeType" in ensemble.columns:
                     ensemble = ensemble[ensemble["TradeType"] == "돌파매매"]
             st.session_state.last_ensemble = ensemble
             st.session_state.last_scan_time = datetime.now()
-            st.session_state.last_scan_source = "live"
+            st.session_state.last_scan_elapsed = elapsed_total
+            st.success(f"✅ 스캔 완료 — {elapsed_total:.0f}초 소요 · 후보 {len(ensemble)}개")
         except Exception as e:
             progress.empty()
             st.error(
-                f"⚠️ **실시간 스캔 실패** — 한국 KRX 서버 접근 불가\n\n"
-                f"이 사이트는 **클라우드 서버**에 배포되어 KRX 데이터를 직접 가져올 수 없습니다.\n"
-                f"**👉 오른쪽 ⚡ 캐시 데이터** 버튼을 사용하세요.\n\n"
-                f"실시간 데이터가 필요하면 로컬 PC에서 `streamlit run app.py` 실행 시 가능합니다.\n\n"
-                f"<details><summary>에러 세부정보</summary>\n\n`{type(e).__name__}: {str(e)[:200]}`\n</details>"
+                f"⚠️ **실시간 스캔 실패** — KRX 서버 접근 불가\n\n"
+                f"이 사이트는 **클라우드 서버**(미국 IP)에서 호스팅되어 한국 KRX 데이터를 가져올 수 없습니다.\n\n"
+                f"**👉 로컬 PC에서 사용하세요:**\n"
+                f"```\n"
+                f"git clone https://github.com/neo9999999999/neo0300\n"
+                f"cd neo0300\n"
+                f"pip install -r requirements.txt\n"
+                f"streamlit run app.py\n"
+                f"```\n\n"
+                f"에러: `{type(e).__name__}: {str(e)[:200]}`"
             )
-
-    if use_cache:
-        with st.spinner("캐시 로딩 중..."):
-            all_e = build_ensemble_all_enriched()
-            if not all_e.empty:
-                # 등급별 후보가 있는 날짜만 필터링하여 자동으로 가장 최근의 V/S/A/B 있는 날짜 선택
-                all_e["grade"] = all_e.apply(
-                    lambda r: classify_one(r.to_dict()), axis=1
-                )
-                graded_dates = sorted(
-                    all_e[all_e["grade"].notna()]["Date"].unique(),
-                    reverse=True,
-                )
-                if graded_dates:
-                    pick_date = graded_dates[0]
-                else:
-                    pick_date = all_e["Date"].max()
-                ensemble = all_e[all_e["Date"] == pick_date].copy()
-                st.session_state.last_ensemble = ensemble
-                st.session_state.last_scan_time = pick_date
-                st.session_state.last_scan_source = "cache"
-                st.session_state.cache_all_dates = graded_dates
-
-    # 캐시 데이터 사용 시 날짜 선택 가능
-    if st.session_state.get("last_scan_source") == "cache":
-        graded_dates = st.session_state.get("cache_all_dates", [])
-        if graded_dates:
-            st.markdown('<div style="height:8px;"></div>', unsafe_allow_html=True)
-            date_options = [pd.Timestamp(d).strftime("%Y-%m-%d") for d in graded_dates[:60]]
-            current = st.session_state.get("last_scan_time")
-            cur_str = pd.Timestamp(current).strftime("%Y-%m-%d") if current is not None else date_options[0]
-            sel = st.selectbox(
-                f"📅 다른 날짜 선택 (V/S/A/B 후보 있는 날만 — 최근 60일)",
-                date_options,
-                index=date_options.index(cur_str) if cur_str in date_options else 0,
-                key="cache_date_select",
-            )
-            if sel != cur_str:
-                sel_ts = pd.Timestamp(sel)
-                all_e2 = build_ensemble_all_enriched()
-                st.session_state.last_ensemble = all_e2[all_e2["Date"] == sel_ts].copy()
-                st.session_state.last_scan_time = sel_ts
-                st.rerun()
 
     ensemble = st.session_state.get("last_ensemble")
     if ensemble is not None and not ensemble.empty:
@@ -694,13 +669,12 @@ def page_today():
         buckets = build_grade_buckets(graded, vs_max=3, ab_only_top1=True)
 
         scan_time = st.session_state.get("last_scan_time")
-        source = st.session_state.get("last_scan_source", "live")
-        time_str = scan_time.strftime("%Y-%m-%d") if hasattr(scan_time, "strftime") else "-"
-        source_str = "🔴 실시간" if source == "live" else "📦 캐시"
+        elapsed = st.session_state.get("last_scan_elapsed", 0)
+        time_str = scan_time.strftime("%Y-%m-%d %H:%M") if hasattr(scan_time, "strftime") else "-"
         st.markdown(
             f'<div style="margin-top:20px;margin-bottom:8px;">'
             f'<h2 style="margin:0;">📋 등급별 추천</h2>'
-            f'<p class="subtle">{source_str} · {time_str} 기준 · 4 프리셋 통합 분석</p>'
+            f'<p class="subtle">🔴 실시간 · {time_str} 기준 · {elapsed:.0f}초 소요 · 4 프리셋 통합 분석</p>'
             f'</div>',
             unsafe_allow_html=True,
         )

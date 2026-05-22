@@ -64,12 +64,19 @@ def get_market_snapshot(filter_cfg: FilterConfig) -> pd.DataFrame:
     return filtered.reset_index(drop=True)
 
 
-def fetch_ohlcv(code: str, days: int = 90, end_date: Optional[str] = None) -> Optional[pd.DataFrame]:
-    """단일 종목 과거 OHLCV. 실패 시 None."""
+def fetch_ohlcv(code: str, days: int = 90, end_date: Optional[str] = None,
+                  fast: bool = True) -> Optional[pd.DataFrame]:
+    """단일 종목 과거 OHLCV. 실패 시 None.
+
+    fast=True (기본): 약 250일치만 (S9 480일 이평 미사용, 1분 내 스캔용)
+    fast=False: 500일+ (S9 장기 이평 480일 계산 가능, 정확한 백테스트용)
+    """
     try:
         end = pd.to_datetime(end_date) if end_date else datetime.now()
-        # S9 장기 이평(480일) 계산용 충분한 lookback 확보
-        lookback = max(days, 500) + 30
+        if fast:
+            lookback = max(days, 250) + 10  # 빠른 모드
+        else:
+            lookback = max(days, 500) + 30
         start = end - timedelta(days=lookback)
         df = fdr.DataReader(code, start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d"))
         if df is None or df.empty:
@@ -447,7 +454,7 @@ def scan_recommendations(
 
     results = []
     total = len(snapshot)
-    with ThreadPoolExecutor(max_workers=10) as ex:
+    with ThreadPoolExecutor(max_workers=30) as ex:
         futures = {
             ex.submit(_process_one, r["Code"], r["Name"], r["Market"], params, weights, end_date): r["Code"]
             for _, r in snapshot.iterrows()
@@ -523,10 +530,10 @@ def scan_ensemble(
     if snapshot.empty:
         return pd.DataFrame()
 
-    # 1) 시그널 1회 계산 (병렬)
+    # 1) 시그널 1회 계산 (병렬 30 workers — 속도 최적화)
     results = []
     total = len(snapshot)
-    with ThreadPoolExecutor(max_workers=10) as ex:
+    with ThreadPoolExecutor(max_workers=30) as ex:
         futures = {
             ex.submit(_process_one_signals_only, r["Code"], r["Name"], r["Market"],
                       params, end_date): r["Code"]
