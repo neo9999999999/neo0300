@@ -41,21 +41,29 @@ def get_market_snapshot(filter_cfg: FilterConfig) -> pd.DataFrame:
     cache_path = Path("cache/market_snapshot.parquet")
     all_df = None
 
-    # 1순위: KIS API (한국투자증권)
+    # 1순위: KIS API (한국투자증권) — 등락률+거래량 통합 통해 광범위 후보
     try:
         import kis_api
         if kis_api.is_available():
-            kospi = kis_api.get_change_rank("KOSPI", top=300) if filter_cfg.include_kospi else pd.DataFrame()
-            kosdaq = kis_api.get_change_rank("KOSDAQ", top=300) if filter_cfg.include_kosdaq else pd.DataFrame()
-            cand = pd.concat([kospi, kosdaq], ignore_index=True) if (not kospi.empty or not kosdaq.empty) else pd.DataFrame()
+            cand = kis_api.get_change_rank_combined(top_per_market=50)
             if not cand.empty:
-                # MarketCap은 KIS 등락률 순위에서 안 줌 → 시총 필터는 캐시에서 채우기
+                # 마켓 필터 적용
+                markets = []
+                if filter_cfg.include_kospi: markets.append("KOSPI")
+                if filter_cfg.include_kosdaq: markets.append("KOSDAQ")
+                cand = cand[cand["Market"].isin(markets)]
+                # MarketCap + Amount 보강 (캐시 마스터에서)
                 if cache_path.exists():
-                    ms = pd.read_parquet(cache_path)[["Code", "MarketCap"]]
+                    ms = pd.read_parquet(cache_path)[["Code", "MarketCap", "Amount"]]
+                    ms = ms.rename(columns={"Amount": "Amount_cache"})
                     cand = cand.merge(ms, on="Code", how="left")
+                    # KIS의 Amount가 0이면 캐시 사용
+                    cand["Amount"] = cand["Amount"].where(cand["Amount"] > 0, cand["Amount_cache"])
+                    cand = cand.drop(columns=["Amount_cache"], errors="ignore")
                 else:
                     cand["MarketCap"] = filter_cfg.min_marcap  # 통과시킴
-                all_df = cand
+                if not cand.empty:
+                    all_df = cand
     except Exception:
         pass
 

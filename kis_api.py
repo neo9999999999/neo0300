@@ -130,6 +130,12 @@ def get_current_price(code: str) -> Optional[Dict]:
         data = r.json()
         out = data.get("output", {})
         if not out: return None
+        mkt_raw = out.get("rprs_mrkt_kor_name", "") or out.get("bstp_kor_isnm", "")
+        # KIS 응답은 "KOSPI200" "코스닥" 등 다양 → 정규화
+        if "KOSPI" in mkt_raw.upper() or "코스피" in mkt_raw or "유가증권" in mkt_raw:
+            market = "KOSPI"
+        else:
+            market = "KOSDAQ"
         return {
             "Code": code,
             "Close": float(out.get("stck_prpr", 0)),
@@ -138,10 +144,30 @@ def get_current_price(code: str) -> Optional[Dict]:
             "Volume": float(out.get("acml_vol", 0)),
             "MarketCap": float(out.get("hts_avls", 0)) * 100_000_000,  # 시총(억원→원)
             "Name": out.get("hts_kor_isnm", ""),
-            "Market": "KOSPI" if out.get("rprs_mrkt_kor_name", "") == "KOSPI" else "KOSDAQ",
+            "Market": market,
         }
     except Exception as e:
         return None
+
+
+def get_change_rank_combined(top_per_market: int = 50) -> pd.DataFrame:
+    """KOSPI + KOSDAQ 등락률 순위 통합 + 거래대금 순위 통합 (중복 제거)."""
+    rows = []
+    for mkt in ["KOSPI", "KOSDAQ"]:
+        # 등락률 상위 (상승)
+        df_up = get_change_rank(mkt, top=top_per_market, direction="up")
+        if not df_up.empty:
+            rows.append(df_up)
+        # 거래량 상위
+        df_vol = get_volume_rank(mkt, top=top_per_market)
+        if not df_vol.empty:
+            rows.append(df_vol)
+    if not rows:
+        return pd.DataFrame()
+    out = pd.concat(rows, ignore_index=True)
+    # 중복 제거 (Code 기준, ChangeRatio 큰 것 우선)
+    out = out.sort_values("ChangeRatio", ascending=False).drop_duplicates("Code", keep="first")
+    return out.reset_index(drop=True)
 
 
 def get_volume_rank(market: str = "KOSDAQ", top: int = 30) -> pd.DataFrame:

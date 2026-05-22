@@ -30,11 +30,19 @@ jobs:
           pip install -r requirements.txt
 
       - name: Update KRX market snapshot
+        env:
+          KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
+          KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET }}
+          KIS_USE_MOCK: "false"
         run: |
           python3 daily_update.py
           ls -la cache/
 
       - name: Refresh enriched parquet (V/S/A/B 추천용)
+        env:
+          KIS_APP_KEY: ${{ secrets.KIS_APP_KEY }}
+          KIS_APP_SECRET: ${{ secrets.KIS_APP_SECRET }}
+          KIS_USE_MOCK: "false"
         run: |
           # 기존 enriched 삭제 후 재계산 (단 V/S/A/B에 쓰는 4개만)
           rm -f cache/enriched_default.parquet cache/enriched_box_breakout.parquet
