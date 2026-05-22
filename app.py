@@ -51,6 +51,45 @@ st.set_page_config(
 )
 
 
+# ===== 비밀번호 인증 =====
+def _check_password():
+    """간단한 비밀번호 게이트. secrets.toml의 APP_PASSWORD 또는 기본값 사용."""
+    try:
+        correct = st.secrets.get("APP_PASSWORD", "123456")
+    except Exception:
+        correct = "123456"
+
+    if st.session_state.get("auth_ok"):
+        return True
+
+    # 로그인 화면
+    st.markdown(
+        '<div style="max-width:420px;margin:80px auto;text-align:center;">'
+        '<div style="font-size:48px;margin-bottom:12px;">🟢</div>'
+        '<h2 style="margin:0 0 8px 0;">종가매수 추천 시스템</h2>'
+        '<p style="color:#888;font-size:14px;margin-bottom:32px;">V/S/A/B 등급제 · 코스닥 돌파매매</p>'
+        '</div>',
+        unsafe_allow_html=True,
+    )
+
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        pwd = st.text_input("비밀번호", type="password", key="_pwd_input",
+                              placeholder="비밀번호 입력")
+        login = st.button("로그인", type="primary", use_container_width=True, key="_login_btn")
+
+        if login or pwd:
+            if pwd == str(correct):
+                st.session_state.auth_ok = True
+                st.rerun()
+            elif pwd:
+                st.error("비밀번호가 일치하지 않습니다.")
+    st.stop()
+
+
+_check_password()
+
+
 # ===== 세션 디폴트 =====
 DEFAULTS = {
     "page": "today",
