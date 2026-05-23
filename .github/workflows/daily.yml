@@ -50,14 +50,22 @@ jobs:
           python3 precompute_enriched.py || echo "precompute 실패 (skip)"
           ls -la cache/enriched_*.parquet 2>&1 | head -10
 
+      - name: Build today picks (회피 6+v2 + 오늘의 추천)
+        run: |
+          python3 live_filter.py || echo "live_filter 실패 (skip)"
+          ls -la cache/today_picks* 2>/dev/null
+
       - name: Commit & push if changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add cache/market_snapshot.parquet cache/market_snapshot_meta.json cache/ohlcv_*.pkl cache/enriched_*.parquet || true
+          git add cache/market_snapshot.parquet cache/market_snapshot_meta.json \
+                  cache/ohlcv_*.pkl cache/enriched_*.parquet \
+                  cache/fundamentals_*.parquet cache/supply_demand.parquet \
+                  cache/today_picks.csv cache/today_picks.json || true
           if git diff --staged --quiet; then
             echo "변경사항 없음"
           else
-            git commit -m "auto: $(date -u +%Y-%m-%d) KRX 캐시 + V/S/A/B enriched 갱신 (GitHub Actions)"
+            git commit -m "auto: $(date -u +%Y-%m-%d) KRX+펀더+수급+오늘추천 갱신 (GitHub Actions)"
             git push
           fi

@@ -112,6 +112,66 @@ def update_ohlcv_cache(top_n: int = 500, end_date: Optional[str] = None,
     return out_path
 
 
+def update_fundamentals_current():
+    """현재 시점 PER/PBR/시총 갱신 (네이버 모바일 API)."""
+    from collect_fundamentals import fetch_current, parse_num
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import json as _json
+
+    cd = CACHE / "_signal_codes.json"
+    if not cd.exists():
+        print("  ⚠ _signal_codes.json 없음 — skip")
+        return
+    with open(cd) as f:
+        codes = _json.load(f)
+    print(f"\n[{datetime.now()}] 펀더멘털(현재) {len(codes)}종목 갱신 중...")
+    rows = []
+    with ThreadPoolExecutor(max_workers=10) as ex:
+        futs = {ex.submit(fetch_current, c): c for c in codes}
+        for fut in as_completed(futs):
+            r = fut.result()
+            if r:
+                rows.append(r)
+    df = pd.DataFrame(rows)
+    for c in ["PER", "EPS", "PBR", "BPS", "추정PER", "추정EPS",
+              "배당수익률", "주당배당금", "외인소진율", "시총", "52주 최고", "52주 최저"]:
+        if c in df.columns:
+            df[c + "_num"] = df[c].apply(parse_num)
+    df.to_parquet(CACHE / "fundamentals_current.parquet", index=False)
+    print(f"  ✓ fundamentals_current.parquet ({len(df)}종목)")
+
+
+def update_supply_demand_incremental():
+    """수급 데이터 증분 갱신 (최근 1페이지만)."""
+    from collect_supply_demand import fetch_code
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import json as _json
+
+    cd = CACHE / "_signal_codes.json"
+    sd_path = CACHE / "supply_demand.parquet"
+    if not cd.exists():
+        print("  ⚠ _signal_codes.json 없음 — skip")
+        return
+    with open(cd) as f:
+        codes = _json.load(f)
+
+    print(f"\n[{datetime.now()}] 수급 증분 갱신 {len(codes)}종목 (최근 1페이지=20거래일)...")
+    existing = pd.read_parquet(sd_path) if sd_path.exists() else pd.DataFrame()
+
+    new_rows = []
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        futs = {ex.submit(fetch_code, c, 1): c for c in codes}
+        for fut in as_completed(futs):
+            df_c = fut.result()
+            if not df_c.empty:
+                new_rows.append(df_c)
+    if new_rows:
+        merged = pd.concat([existing] + new_rows, ignore_index=True)
+        merged = merged.drop_duplicates(subset=["Code", "Date"])
+        merged.to_parquet(sd_path, index=False)
+        print(f"  ✓ supply_demand.parquet ({len(merged):,}건)")
+
+
 def main():
     print("=" * 60)
     print(f"KRX 데이터 자동 업데이트 시작 · {datetime.now()}")
@@ -128,6 +188,27 @@ def main():
         update_ohlcv_cache(top_n=500)
     except Exception as e:
         print(f"⚠ ohlcv 캐시 갱신 실패 (계속): {e}")
+        traceback.print_exc()
+
+    # B+C: 펀더멘털/수급 증분 갱신
+    try:
+        update_fundamentals_current()
+    except Exception as e:
+        print(f"⚠ 펀더멘털 갱신 실패 (계속): {e}")
+        traceback.print_exc()
+
+    try:
+        update_supply_demand_incremental()
+    except Exception as e:
+        print(f"⚠ 수급 갱신 실패 (계속): {e}")
+        traceback.print_exc()
+
+    # 오늘의 추천 빌드
+    try:
+        from live_filter import build_today_picks
+        build_today_picks(top_n=20)
+    except Exception as e:
+        print(f"⚠ 추천 빌드 실패 (계속): {e}")
         traceback.print_exc()
 
     print(f"\n[{datetime.now()}] 완료")
