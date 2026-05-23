@@ -86,14 +86,20 @@ GRADE_INFO = {
 }
 
 
-def classify_one(row: Dict) -> Optional[str]:
+def classify_one(row: Dict, allow_kospi: bool = True) -> Optional[str]:
     """단일 후보의 등급 분류. None이면 등급 미달.
 
     row 필수 키: Market, ChangeRatio, n_presets, avg_score (또는 Score)
+    allow_kospi=True (기본): KOSPI + KOSDAQ 모두 허용 (TOP 100 분석 결과 KOSPI 슈퍼위너 다수)
+    allow_kospi=False: 기존 KOSDAQ만
     """
     market = row.get("Market", "")
-    if market != "KOSDAQ":
-        return None
+    if allow_kospi:
+        if market not in ("KOSDAQ", "KOSPI"):
+            return None
+    else:
+        if market != "KOSDAQ":
+            return None
     cr = row.get("ChangeRatio", 0)
     n_presets = row.get("n_presets", 0)
     score = row.get("avg_score", row.get("Score", 0))

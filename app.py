@@ -2025,12 +2025,16 @@ def render_daily_signals(df, position_size: int = 1_000_000):
 # V/S/A/B 일자별 + 월별 손익
 # =============================================================================
 @st.cache_data(show_spinner=False)
-def _load_vsab_history():
-    """전체 enriched 통합 → 일자별 V/S/A/B 분류 결과."""
+def _load_vsab_history(allow_kospi: bool = True):
+    """전체 enriched 통합 → 일자별 V/S/A/B 분류 결과.
+
+    allow_kospi=True (기본): KOSPI + KOSDAQ
+    allow_kospi=False: KOSDAQ만 (이전 방식)
+    """
     df = build_ensemble_all_enriched()
     if df.empty:
         return pd.DataFrame()
-    df["grade"] = df.apply(lambda r: classify_one(r.to_dict()), axis=1)
+    df["grade"] = df.apply(lambda r: classify_one(r.to_dict(), allow_kospi=allow_kospi), axis=1)
     return df
 
 
@@ -3840,6 +3844,19 @@ def page_admin():
             index=[20, 30, 60, 90, 120, 180, 240, 365].index(st.session_state.adm_hold_days),
             key="set_hold_days",
         )
+
+        st.markdown("##### 🌐 시장 범위")
+        if "adm_allow_kospi" not in st.session_state:
+            st.session_state.adm_allow_kospi = True
+        st.session_state.adm_allow_kospi = st.checkbox(
+            "KOSPI 포함 (TOP 100 분석으로 슈퍼위너 30건 추가 확인됨)",
+            value=st.session_state.adm_allow_kospi,
+            key="set_allow_kospi",
+        )
+        if st.session_state.adm_allow_kospi:
+            st.caption("✅ KOSPI + KOSDAQ — 6년 누적 +7,601만 (+43% 증가)")
+        else:
+            st.caption("⚠️ KOSDAQ만 — 금양 +1189% 같은 KOSPI 슈퍼위너 누락")
         st.caption("기본 180일 (백테스트 손익비 최고). 240일/365일은 더 큰 누적 가능.")
 
         st.markdown("---")
