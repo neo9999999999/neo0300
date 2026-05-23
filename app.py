@@ -51,9 +51,9 @@ st.set_page_config(
 )
 
 
-# ===== 비밀번호 인증 =====
+# ===== 비밀번호 인증 (네이버 그린 디자인) =====
 def _check_password():
-    """간단한 비밀번호 게이트. secrets.toml의 APP_PASSWORD 또는 기본값 사용."""
+    """깔끔한 로그인 게이트. 문구 X, 비번 입력 + 버튼만."""
     try:
         correct = st.secrets.get("APP_PASSWORD", "123456")
     except Exception:
@@ -62,20 +62,26 @@ def _check_password():
     if st.session_state.get("auth_ok"):
         return True
 
-    # 로그인 화면
+    # 로그인 화면 — 네이버 그린 그라데이션 로고만
     st.markdown(
-        '<div style="max-width:420px;margin:80px auto;text-align:center;">'
-        '<div style="font-size:48px;margin-bottom:12px;">🟢</div>'
-        '<h2 style="margin:0 0 8px 0;">종가매수 추천 시스템</h2>'
-        '<p style="color:#888;font-size:14px;margin-bottom:32px;">V/S/A/B 등급제 · 코스닥 돌파매매</p>'
+        '<style>'
+        '.login-container { max-width: 400px; margin: 100px auto 40px; text-align: center; }'
+        '.login-logo { width: 64px; height: 64px; background: linear-gradient(135deg, #00C73C 0%, #03C75A 100%); '
+        '  border-radius: 18px; display: inline-flex; align-items: center; justify-content: center; '
+        '  box-shadow: 0 6px 20px rgba(3,199,90,0.25); margin-bottom: 20px; }'
+        '.login-logo span { color: #FFFFFF; font-weight: 900; font-size: 32px; letter-spacing: -1.5px; }'
+        '@media (max-width: 480px) { .login-container { margin-top: 60px; padding: 0 20px; } }'
+        '</style>'
+        '<div class="login-container">'
+        '<div class="login-logo"><span>N</span></div>'
         '</div>',
         unsafe_allow_html=True,
     )
 
-    col1, col2, col3 = st.columns([1, 2, 1])
+    col1, col2, col3 = st.columns([1, 2.5, 1])
     with col2:
         pwd = st.text_input("비밀번호", type="password", key="_pwd_input",
-                              placeholder="비밀번호 입력")
+                              placeholder="비밀번호", label_visibility="collapsed")
         login = st.button("로그인", type="primary", use_container_width=True, key="_login_btn")
 
         if login or pwd:
@@ -126,6 +132,7 @@ with st.sidebar:
         ("오늘의 종가매수 추천", "today"),
         ("백테스트 결과", "results"),
         ("사례 & 가이드", "library"),
+        ("⚙️ 어드민 설정", "admin"),
     ]
     for label, key in PAGES:
         btn_type = "primary" if st.session_state.page == key else "secondary"
@@ -3386,11 +3393,335 @@ def page_library():
 
 
 # =============================================================================
+# 어드민 페이지
+# =============================================================================
+def page_admin():
+    p = PALETTE[st.session_state.theme]
+    st.markdown(
+        f'<h1>⚙️ 어드민 설정</h1>'
+        f'<p style="color:{p["text_secondary"]};">'
+        f'V/S/A/B 등급 기준, 비중, API 키, 사용 통계 — 모두 여기서 관리.</p>',
+        unsafe_allow_html=True,
+    )
+
+    tabs = st.tabs([
+        "📊 등급 설정",
+        "💰 비중 조정",
+        "🔑 API 키",
+        "🔐 비밀번호",
+        "📈 사용 통계",
+    ])
+
+    # ─── 1. 등급 설정 ─────────────────────────────────────
+    with tabs[0]:
+        st.markdown("### V/S/A/B 등급 조건 조정")
+        st.caption("점수 임계값과 등락률 범위를 변경할 수 있습니다. (저장 시 다음 스캔부터 반영)")
+
+        # 세션 디폴트
+        if "adm_v_score" not in st.session_state: st.session_state.adm_v_score = 75
+        if "adm_s_score" not in st.session_state: st.session_state.adm_s_score = 65
+        if "adm_a_score" not in st.session_state: st.session_state.adm_a_score = 65
+        if "adm_chg_min" not in st.session_state: st.session_state.adm_chg_min = 7.0
+        if "adm_chg_max" not in st.session_state: st.session_state.adm_chg_max = 25.0
+        if "adm_a_chg_min" not in st.session_state: st.session_state.adm_a_chg_min = 10.0
+        if "adm_a_chg_max" not in st.session_state: st.session_state.adm_a_chg_max = 18.0
+        if "adm_hold_days" not in st.session_state: st.session_state.adm_hold_days = 180
+
+        st.markdown("##### 🏆 V급 (Very Best)")
+        c1, c2 = st.columns(2)
+        st.session_state.adm_v_score = c1.number_input(
+            "최소 점수", 50, 100, st.session_state.adm_v_score, 1, key="set_v_score"
+        )
+        c2.caption(f"기본값: 75 · 6년 32회 출현 (연 5회)")
+
+        st.markdown("##### 💎 S급 (Super) — 4프리셋 만장일치")
+        c1, c2 = st.columns(2)
+        st.session_state.adm_s_score = c1.number_input(
+            "최소 점수", 40, 95, st.session_state.adm_s_score, 1, key="set_s_score"
+        )
+        c2.caption("기본값: 65 · 6년 99회 출현 (연 17회)")
+
+        st.markdown("##### ⭐ A급 (Advanced)")
+        c1, c2, c3 = st.columns(3)
+        st.session_state.adm_a_score = c1.number_input(
+            "최소 점수", 40, 95, st.session_state.adm_a_score, 1, key="set_a_score"
+        )
+        st.session_state.adm_a_chg_min = c2.number_input(
+            "등락 최소(%)", 5.0, 20.0, st.session_state.adm_a_chg_min, 0.5, key="set_a_chg_min"
+        )
+        st.session_state.adm_a_chg_max = c3.number_input(
+            "등락 최대(%)", 10.0, 30.0, st.session_state.adm_a_chg_max, 0.5, key="set_a_chg_max"
+        )
+
+        st.markdown("##### 🟢 B급 (Basic) — V1 통과 + 공통 등락 범위")
+        c1, c2 = st.columns(2)
+        st.session_state.adm_chg_min = c1.number_input(
+            "공통 등락 최소(%)", 1.0, 20.0, st.session_state.adm_chg_min, 0.5, key="set_chg_min"
+        )
+        st.session_state.adm_chg_max = c2.number_input(
+            "공통 등락 최대(%)", 10.0, 30.0, st.session_state.adm_chg_max, 0.5, key="set_chg_max"
+        )
+
+        st.markdown("##### 📅 매도 기본 보유기간")
+        st.session_state.adm_hold_days = st.selectbox(
+            "보유기간", [20, 30, 60, 90, 120, 180, 240, 365],
+            index=[20, 30, 60, 90, 120, 180, 240, 365].index(st.session_state.adm_hold_days),
+            key="set_hold_days",
+        )
+        st.caption("기본 180일 (백테스트 손익비 최고). 240일/365일은 더 큰 누적 가능.")
+
+        st.markdown("---")
+        if st.button("✅ 등급 설정 저장", type="primary", use_container_width=True,
+                       key="save_grade_settings"):
+            # grade.py의 동적 설정을 위해 session_state에 저장 (현재 세션 한정)
+            st.success(f"✅ 저장 완료 — V:{st.session_state.adm_v_score}점, "
+                        f"S:{st.session_state.adm_s_score}점, A:{st.session_state.adm_a_score}점, "
+                        f"공통 등락: {st.session_state.adm_chg_min}~{st.session_state.adm_chg_max}%, "
+                        f"보유: {st.session_state.adm_hold_days}일")
+
+        st.info(
+            "💡 **참고**: 설정 변경은 **현재 세션에만 적용**됩니다. 영구 저장은 "
+            "코드의 `grade.py`에서 직접 수정해야 합니다. (변경 시 `git push` → Streamlit Cloud 자동 재배포)"
+        )
+
+    # ─── 2. 비중 조정 ─────────────────────────────────────
+    with tabs[1]:
+        st.markdown("### 등급별 매수 비중 (만원)")
+        st.caption("종목당 매수 금액. V > S > A > B 순으로 큰 비중 배분 권장.")
+
+        cc = st.columns(4)
+        cur_v = st.session_state.get("weight_V", GRADE_WEIGHTS["V"]) // 10000
+        cur_s = st.session_state.get("weight_S", GRADE_WEIGHTS["S"]) // 10000
+        cur_a = st.session_state.get("weight_A", GRADE_WEIGHTS["A"]) // 10000
+        cur_b = st.session_state.get("weight_B", GRADE_WEIGHTS["B"]) // 10000
+
+        v = cc[0].number_input(f"🏆 V급", 10, 5000, int(cur_v), 10, key="adm_w_V")
+        s = cc[1].number_input(f"💎 S급", 10, 5000, int(cur_s), 10, key="adm_w_S")
+        a = cc[2].number_input(f"⭐ A급", 10, 5000, int(cur_a), 10, key="adm_w_A")
+        b = cc[3].number_input(f"🟢 B급", 10, 5000, int(cur_b), 10, key="adm_w_B")
+
+        st.session_state.weight_V = v * 10000
+        st.session_state.weight_S = s * 10000
+        st.session_state.weight_A = a * 10000
+        st.session_state.weight_B = b * 10000
+
+        # 예상 자본 계산 (180일 기준 동시 보유)
+        est_v = v * 5 * 0.8  # 평균 5개 동시
+        est_s = s * 16 * 0.8
+        est_a = a * 7 * 0.8
+        est_b = b * 110 * 0.5  # B급은 회전율 높음
+        est_total = est_v + est_s + est_a + est_b
+
+        st.markdown("---")
+        st.markdown("##### 💰 예상 필요 자본 (180일 보유 기준)")
+        cap_cols = st.columns(5)
+        cap_cols[0].metric("V급", f"{int(est_v):,}만", "5개 동시")
+        cap_cols[1].metric("S급", f"{int(est_s):,}만", "16개 동시")
+        cap_cols[2].metric("A급", f"{int(est_a):,}만", "7개 동시")
+        cap_cols[3].metric("B급", f"{int(est_b):,}만", "110개 동시")
+        cap_cols[4].metric("총", f"{int(est_total):,}만", "피크 자본")
+
+        if st.button("✅ 비중 저장", type="primary", use_container_width=True, key="save_weights"):
+            st.success(f"✅ 비중 저장 — V:{v}만 / S:{s}만 / A:{a}만 / B:{b}만 · 예상 자본 {int(est_total):,}만")
+
+    # ─── 3. API 키 ──────────────────────────────────────
+    with tabs[2]:
+        st.markdown("### 🔑 API 키 관리")
+
+        # KIS API 상태
+        try:
+            import kis_api
+            kis_ok = kis_api.is_available()
+        except Exception:
+            kis_ok = False
+
+        st.markdown("##### 한국투자 OpenAPI")
+        if kis_ok:
+            st.success("✅ KIS API 연결됨 — 실시간 데이터 사용 가능")
+            if st.button("🧪 연결 테스트", key="test_kis"):
+                with st.spinner("토큰 발급 + 삼성전자 조회 중..."):
+                    try:
+                        tok = kis_api.get_access_token()
+                        sam = kis_api.get_current_price("005930")
+                        if tok and sam:
+                            st.success(f"✅ 토큰 OK · 삼성전자 {int(sam['Close']):,}원 ({sam['ChangeRatio']:+.2f}%)")
+                        else:
+                            st.error("⚠️ 토큰 또는 시세 조회 실패")
+                    except Exception as e:
+                        st.error(f"❌ {e}")
+        else:
+            st.warning("⚠️ KIS API 미설정")
+            st.markdown(
+                "**설정 방법:**\n\n"
+                "**1. Streamlit Cloud:**\n"
+                "- https://share.streamlit.io → `neo0300` → ⋮ → Settings → Secrets\n"
+                "- 다음 추가:\n"
+                "```toml\n"
+                "KIS_APP_KEY = \"...\"\n"
+                "KIS_APP_SECRET = \"...\"\n"
+                "KIS_USE_MOCK = \"false\"\n"
+                "```\n\n"
+                "**2. 로컬:**\n"
+                "- 프로젝트 폴더의 `.env` 파일에 추가 후 `./run_with_kis.sh` 실행\n\n"
+                "**3. 키 발급:**\n"
+                "- https://apiportal.koreainvestment.com → 마이페이지 → 앱 관리"
+            )
+
+        st.markdown("---")
+        st.markdown("##### 텔레그램 알림")
+        try:
+            tg_token = st.secrets.get("TG_BOT_TOKEN", "")
+            tg_chat = st.secrets.get("TG_CHAT_ID", "")
+        except Exception:
+            import os as _os
+            tg_token = _os.environ.get("TG_BOT_TOKEN", "")
+            tg_chat = _os.environ.get("TG_CHAT_ID", "")
+
+        if tg_token and tg_chat:
+            st.success(f"✅ 텔레그램 봇 설정됨 (Chat ID: {tg_chat[:5]}...)")
+        else:
+            st.warning("⚠️ 텔레그램 미설정")
+            st.markdown(
+                "**설정 방법:**\n"
+                "1. 텔레그램 `@BotFather` → `/newbot` → 토큰 받기\n"
+                "2. 본인 봇에서 `/start` → https://api.telegram.org/bot{TOKEN}/getUpdates 에서 chat_id 확인\n"
+                "3. Secrets 추가:\n"
+                "```toml\n"
+                "TG_BOT_TOKEN = \"...\"\n"
+                "TG_CHAT_ID = \"...\"\n"
+                "```\n\n"
+                "4. 매일 자동 알림: `python3 telegram_alert.py --live`"
+            )
+
+    # ─── 4. 비밀번호 변경 ──────────────────────────────────
+    with tabs[3]:
+        st.markdown("### 🔐 비밀번호 변경")
+        st.caption("현재 비밀번호는 Streamlit Cloud Secrets의 `APP_PASSWORD`에 저장됩니다.")
+
+        try:
+            current_pw = st.secrets.get("APP_PASSWORD", "123456")
+        except Exception:
+            current_pw = "123456"
+        st.markdown(f"**현재 비밀번호:** `{'•' * len(str(current_pw))}` ({len(str(current_pw))}자리)")
+
+        st.markdown("---")
+        st.markdown("##### 새 비밀번호 설정")
+        np1 = st.text_input("새 비밀번호", type="password", key="adm_new_pw1",
+                              placeholder="6~20자")
+        np2 = st.text_input("새 비밀번호 확인", type="password", key="adm_new_pw2",
+                              placeholder="다시 입력")
+
+        if st.button("✅ 변경 안내 보기", type="primary", use_container_width=True, key="show_pw_guide"):
+            if not np1 or not np2:
+                st.error("새 비밀번호를 입력하세요")
+            elif np1 != np2:
+                st.error("비밀번호가 일치하지 않습니다")
+            elif len(np1) < 6:
+                st.error("최소 6자 이상")
+            else:
+                st.success(f"✅ 검증 OK. 아래 가이드대로 Streamlit Cloud Secrets에 등록하세요.")
+                st.code(f"APP_PASSWORD = \"{np1}\"", language="toml")
+                st.info(
+                    "**적용 방법:**\n"
+                    "1. https://share.streamlit.io → `neo0300` → ⋮ → Settings → Secrets\n"
+                    "2. 위 라인 추가/수정 후 Save\n"
+                    "3. 1분 후 새 비밀번호로 로그인"
+                )
+
+    # ─── 5. 사용 통계 ───────────────────────────────────
+    with tabs[4]:
+        st.markdown("### 📈 사용 통계")
+        from pathlib import Path
+        import os as _os
+        import json as _json
+
+        # 세션 통계
+        st.markdown("##### 📊 현재 세션")
+        sess_stats = {
+            "auth_ok": st.session_state.get("auth_ok", False),
+            "current_page": st.session_state.get("page", "today"),
+            "scans_done": st.session_state.get("last_scan_time", None),
+        }
+        cc = st.columns(3)
+        cc[0].metric("로그인 상태", "✅ 인증됨" if sess_stats["auth_ok"] else "❌ 미인증")
+        cc[1].metric("현재 페이지", str(sess_stats["current_page"]))
+        cc[2].metric("마지막 스캔",
+                       sess_stats["scans_done"].strftime("%H:%M") if hasattr(sess_stats["scans_done"], "strftime") else "—")
+
+        st.markdown("---")
+        st.markdown("##### 💾 데이터 캐시 상태")
+        cache_dir = Path("cache")
+        if cache_dir.exists():
+            ms_path = cache_dir / "market_snapshot.parquet"
+            ms_meta = cache_dir / "market_snapshot_meta.json"
+
+            rows = []
+            if ms_path.exists():
+                mtime = pd.Timestamp(ms_path.stat().st_mtime, unit="s")
+                size_mb = ms_path.stat().st_size / 1e6
+                rows.append({
+                    "파일": "market_snapshot.parquet",
+                    "크기": f"{size_mb:.2f} MB",
+                    "갱신 시각": mtime.strftime("%Y-%m-%d %H:%M"),
+                })
+
+            if ms_meta.exists():
+                try:
+                    meta = _json.loads(ms_meta.read_text())
+                    rows.append({
+                        "파일": "market_snapshot_meta.json",
+                        "크기": f"종목 {meta.get('n_stocks', 0):,}개",
+                        "갱신 시각": meta.get("updated_at", "—")[:19],
+                    })
+                except Exception:
+                    pass
+
+            for p_ in sorted(cache_dir.glob("ohlcv_*.pkl"), reverse=True)[:2]:
+                mtime = pd.Timestamp(p_.stat().st_mtime, unit="s")
+                size_mb = p_.stat().st_size / 1e6
+                rows.append({
+                    "파일": p_.name,
+                    "크기": f"{size_mb:.2f} MB",
+                    "갱신 시각": mtime.strftime("%Y-%m-%d %H:%M"),
+                })
+
+            for p_ in sorted(cache_dir.glob("enriched_*.parquet"))[:5]:
+                mtime = pd.Timestamp(p_.stat().st_mtime, unit="s")
+                size_mb = p_.stat().st_size / 1e6
+                rows.append({
+                    "파일": p_.name,
+                    "크기": f"{size_mb:.2f} MB",
+                    "갱신 시각": mtime.strftime("%Y-%m-%d %H:%M"),
+                })
+
+            if rows:
+                st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+
+        st.markdown("---")
+        st.markdown("##### 🔄 자동 갱신 시스템")
+        st.markdown(
+            "- **GitHub Actions**: 매일 한국시간 16:30 자동 실행\n"
+            "- **워크플로**: `.github/workflows/daily.yml`\n"
+            "- **갱신 항목**: KRX 종목 마스터 + 시총 500 OHLCV + V/S/A/B enriched 4개\n"
+            "- **수동 트리거**: `gh workflow run daily.yml -R neo9999999999/neo0300`"
+        )
+
+        st.markdown("---")
+        st.markdown("##### 🌐 데이터 소스 우선순위")
+        st.markdown(
+            "1. **KIS OpenAPI** (한국투자증권) — 키 등록 시 어디서나 작동\n"
+            "2. **FinanceDataReader** — 한국 IP 직접 호출 (cloudflared 터널)\n"
+            "3. **로컬 캐시** — GitHub Actions가 매일 갱신한 데이터"
+        )
+
+
+# =============================================================================
 # 라우팅
 # =============================================================================
 ROUTES = {
     "today": page_today,
     "results": page_results,
     "library": page_library,
+    "admin": page_admin,
 }
 ROUTES.get(st.session_state.page, page_today)()

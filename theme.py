@@ -1,56 +1,76 @@
 """
-디자인 시스템 — 토큰 기반 + 컴포넌트 일괄 처리.
+디자인 시스템 v2 — 네이버 그린 그라데이션 + 모바일 반응형
 
-원칙:
-- Primary 버튼: 모든 위치(메인/사이드바) 핑크 배경 + 흰색 굵은 글자
-- Secondary 버튼: 흰색 배경 + 검정 굵은 글자 + 얇은 보더
-- 텍스트 컬러 부모/자식 모두 강제 (Streamlit 내부 p 태그 대응)
-- 이모지 ❌, 텍스트만
+특징:
+- 메인 컬러: 네이버 그린 #03C75A (그라데이션 #00C73C → #03C75A)
+- Pretendard 폰트 우선
+- 둥근 모서리 14px
+- 부드러운 그림자 (네이버 카드 스타일)
+- 모바일 반응형 (768px / 480px breakpoint)
 """
 
 # =============================================================================
-# 디자인 토큰
+# 네이버 디자인 토큰
 # =============================================================================
 TOKENS = {
     "light": {
         # 표면
-        "bg": "#FAFAFA",
+        "bg": "#F7F9FA",
         "surface": "#FFFFFF",
-        "surface_alt": "#F5F5F5",
-        "border": "#EAEAEA",
-        "border_strong": "#D0D0D0",
-        # 텍스트
-        "text": "#1A1A1A",
-        "text_2": "#4B5563",
-        "text_3": "#9CA3AF",
+        "surface_alt": "#F1F4F6",
+        "surface_hover": "#E9EFF2",
+        "border": "#E5E8EB",
+        "border_strong": "#D4D9DD",
+        # 텍스트 (네이버 그레이스케일)
+        "text": "#191B1F",
+        "text_2": "#4E5559",
+        "text_3": "#8B95A1",
+        "text_disabled": "#B0B8C1",
         "text_on_accent": "#FFFFFF",
-        # 액센트
-        "accent": "#E91E63",
-        "accent_strong": "#C2185B",
-        "accent_soft": "#FCE4EC",
-        # 시멘틱
-        "up": "#E91E63",
-        "down": "#3B82F6",
-        "warn": "#F59E0B",
-        "danger": "#DC2626",
+        # 액센트 (네이버 그린)
+        "accent": "#03C75A",
+        "accent_strong": "#02B255",
+        "accent_dark": "#019543",
+        "accent_soft": "#E8FFEF",
+        "accent_softer": "#F0FFF5",
+        # 그라데이션
+        "gradient_start": "#00C73C",
+        "gradient_end": "#03C75A",
+        # 시멘틱 (한국식 빨강↑/파랑↓)
+        "up": "#F04452",
+        "up_soft": "#FFEEEF",
+        "down": "#1F8FFF",
+        "down_soft": "#E8F3FF",
+        "warn": "#FF9933",
+        "warn_soft": "#FFF4E6",
+        "danger": "#E03131",
     },
     "dark": {
-        "bg": "#0F0F12",
-        "surface": "#1A1A1F",
-        "surface_alt": "#22222A",
-        "border": "#2A2A30",
-        "border_strong": "#3A3A42",
-        "text": "#FAFAFA",
-        "text_2": "#B0B0B8",
-        "text_3": "#7A7A82",
+        "bg": "#0D1117",
+        "surface": "#161B22",
+        "surface_alt": "#21262D",
+        "surface_hover": "#2D333B",
+        "border": "#30363D",
+        "border_strong": "#444C56",
+        "text": "#E6EDF3",
+        "text_2": "#B4BCC4",
+        "text_3": "#7D8590",
+        "text_disabled": "#484F58",
         "text_on_accent": "#FFFFFF",
-        "accent": "#EC4899",
-        "accent_strong": "#DB2777",
-        "accent_soft": "#3F1A2F",
-        "up": "#EC4899",
-        "down": "#60A5FA",
-        "warn": "#F59E0B",
-        "danger": "#F87171",
+        "accent": "#03C75A",
+        "accent_strong": "#04D466",
+        "accent_dark": "#02B255",
+        "accent_soft": "#0E2F1A",
+        "accent_softer": "#0A2014",
+        "gradient_start": "#04D466",
+        "gradient_end": "#03C75A",
+        "up": "#FF6B6B",
+        "up_soft": "#3A1E22",
+        "down": "#5BA5FF",
+        "down_soft": "#1A2F4A",
+        "warn": "#FFB951",
+        "warn_soft": "#3A2A14",
+        "danger": "#FF6B6B",
     },
 }
 
@@ -62,7 +82,6 @@ PALETTE = {
         "text_secondary": TOKENS["light"]["text_2"],
         "text_tertiary": TOKENS["light"]["text_3"],
         "accent_bg": TOKENS["light"]["accent_soft"],
-        "accent_soft": TOKENS["light"]["accent_strong"],  # 기존 코드 호환
     },
     "dark": {
         **TOKENS["dark"],
@@ -70,113 +89,125 @@ PALETTE = {
         "text_secondary": TOKENS["dark"]["text_2"],
         "text_tertiary": TOKENS["dark"]["text_3"],
         "accent_bg": TOKENS["dark"]["accent_soft"],
-        "accent_soft": TOKENS["dark"]["accent_strong"],
     },
 }
 
 
 def get_css(mode: str = "light") -> str:
     t = TOKENS[mode]
-
-    # ────────────────────────────────────────────────────────
-    # CSS 토큰 변수 + 글로벌 컴포넌트
-    # ────────────────────────────────────────────────────────
     return f"""
 <style>
+/* Pretendard 폰트 로드 */
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css');
+
 :root {{
     --bg: {t['bg']};
     --surface: {t['surface']};
     --surface-alt: {t['surface_alt']};
+    --surface-hover: {t['surface_hover']};
     --border: {t['border']};
     --border-strong: {t['border_strong']};
     --text: {t['text']};
     --text-2: {t['text_2']};
     --text-3: {t['text_3']};
+    --text-disabled: {t['text_disabled']};
     --on-accent: {t['text_on_accent']};
     --accent: {t['accent']};
     --accent-strong: {t['accent_strong']};
+    --accent-dark: {t['accent_dark']};
     --accent-soft: {t['accent_soft']};
+    --accent-softer: {t['accent_softer']};
+    --gradient-start: {t['gradient_start']};
+    --gradient-end: {t['gradient_end']};
+    --gradient: linear-gradient(135deg, {t['gradient_start']} 0%, {t['gradient_end']} 100%);
     --up: {t['up']};
+    --up-soft: {t['up_soft']};
     --down: {t['down']};
+    --down-soft: {t['down_soft']};
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-md: 0 2px 8px rgba(0,0,0,0.06);
+    --shadow-lg: 0 8px 24px rgba(3,199,90,0.12);
 }}
 
 /* =========================================================
    GLOBAL
    ========================================================= */
 .stApp {{ background-color: var(--bg); color: var(--text); }}
-* {{ font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Apple SD Gothic Neo", system-ui, sans-serif; }}
+* {{
+    font-family: 'Pretendard', 'Pretendard Variable', -apple-system, BlinkMacSystemFont,
+                 'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+}}
 
 .block-container {{
-    padding-top: 36px;
-    padding-bottom: 60px;
-    max-width: 920px;
+    padding-top: 32px;
+    padding-bottom: 80px;
+    max-width: 960px;
 }}
 
 /* =========================================================
-   TYPOGRAPHY
+   TYPOGRAPHY (네이버 스타일)
    ========================================================= */
 h1 {{
     color: var(--text) !important;
-    font-size: 28px !important;
+    font-size: 26px !important;
     font-weight: 800 !important;
-    letter-spacing: -0.5px !important;
+    letter-spacing: -0.6px !important;
     margin-bottom: 8px !important;
     border: none !important;
     padding: 0 !important;
+    line-height: 1.3 !important;
 }}
 h2 {{
     color: var(--text) !important;
-    font-size: 20px !important;
+    font-size: 19px !important;
     font-weight: 700 !important;
-    letter-spacing: -0.3px !important;
+    letter-spacing: -0.4px !important;
     margin-top: 28px !important;
     margin-bottom: 12px !important;
 }}
 h3 {{
     color: var(--text) !important;
-    font-size: 17px !important;
+    font-size: 16px !important;
     font-weight: 700 !important;
     margin-bottom: 8px !important;
 }}
 p, .stMarkdown p {{
     color: var(--text-2);
     font-size: 14px;
-    line-height: 1.6;
+    line-height: 1.65;
+    letter-spacing: -0.2px;
 }}
-strong, b {{ color: var(--text); }}
+strong, b {{ color: var(--text); font-weight: 700; }}
 
 /* =========================================================
-   SIDEBAR
+   SIDEBAR (네이버 미니멀)
    ========================================================= */
 section[data-testid="stSidebar"] {{
     background-color: var(--surface);
     border-right: 1px solid var(--border);
 }}
 section[data-testid="stSidebar"] > div {{
-    padding-top: 24px; padding-left: 20px; padding-right: 20px;
+    padding-top: 24px; padding-left: 16px; padding-right: 16px;
 }}
 
 /* =========================================================
-   BUTTON SYSTEM (GLOBAL — 모든 위치 적용)
+   BUTTON — 네이버 그린 그라데이션
    ========================================================= */
 
-/* ========= Primary 버튼 본체 ========= */
+/* Primary 버튼 본체 */
 button[kind="primary"],
 [data-testid="baseButton-primary"],
 [data-testid="stBaseButton-primary"] {{
+    background: var(--gradient) !important;
     background-color: var(--accent) !important;
     border: none !important;
-    box-shadow: none !important;
+    box-shadow: 0 2px 6px rgba(3,199,90,0.20) !important;
+    transition: all 0.18s ease !important;
 }}
-/* Primary 자식 요소 - 텍스트 색상만 강제, 보더/배경 제거 */
 button[kind="primary"] *,
-button[kind="primary"] p,
-button[kind="primary"] span,
-button[kind="primary"] div,
 [data-testid="baseButton-primary"] *,
-[data-testid="baseButton-primary"] p,
-[data-testid="stBaseButton-primary"] *,
-[data-testid="stBaseButton-primary"] p {{
+[data-testid="stBaseButton-primary"] * {{
     color: #FFFFFF !important;
     -webkit-text-fill-color: #FFFFFF !important;
     background-color: transparent !important;
@@ -184,75 +215,63 @@ button[kind="primary"] div,
     border: none !important;
     box-shadow: none !important;
     text-shadow: none !important;
-    font-weight: 800 !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.2px !important;
 }}
 button[kind="primary"]:hover,
 [data-testid="baseButton-primary"]:hover,
 [data-testid="stBaseButton-primary"]:hover {{
-    background-color: var(--accent-strong) !important;
-}}
-button[kind="primary"]:hover *,
-[data-testid="baseButton-primary"]:hover *,
-[data-testid="stBaseButton-primary"]:hover * {{
-    color: #FFFFFF !important;
-    -webkit-text-fill-color: #FFFFFF !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 14px rgba(3,199,90,0.30) !important;
+    filter: brightness(1.05) !important;
 }}
 
-/* ========= Secondary 버튼 본체 ========= */
+/* Secondary 버튼 본체 */
 button[kind="secondary"],
 [data-testid="baseButton-secondary"],
 [data-testid="stBaseButton-secondary"] {{
     background-color: var(--surface) !important;
     border: 1px solid var(--border) !important;
     box-shadow: none !important;
+    transition: all 0.15s ease !important;
 }}
-/* Secondary 자식 요소 - 텍스트만, 보더/배경 제거 */
 button[kind="secondary"] *,
-button[kind="secondary"] p,
-button[kind="secondary"] span,
-button[kind="secondary"] div,
 [data-testid="baseButton-secondary"] *,
-[data-testid="baseButton-secondary"] p,
-[data-testid="stBaseButton-secondary"] *,
-[data-testid="stBaseButton-secondary"] p {{
+[data-testid="stBaseButton-secondary"] * {{
     color: var(--text) !important;
     -webkit-text-fill-color: var(--text) !important;
     background-color: transparent !important;
-    background: transparent !important;
     border: none !important;
     box-shadow: none !important;
-    font-weight: 700 !important;
+    font-weight: 600 !important;
 }}
 button[kind="secondary"]:hover,
 [data-testid="baseButton-secondary"]:hover,
 [data-testid="stBaseButton-secondary"]:hover {{
-    background-color: var(--accent-soft) !important;
+    background-color: var(--accent-softer) !important;
     border-color: var(--accent) !important;
 }}
-button[kind="secondary"]:hover *,
-[data-testid="baseButton-secondary"]:hover *,
-[data-testid="stBaseButton-secondary"]:hover * {{
-    color: var(--accent) !important;
-    -webkit-text-fill-color: var(--accent) !important;
-    background-color: transparent !important;
+button[kind="secondary"]:hover * {{
+    color: var(--accent-dark) !important;
+    -webkit-text-fill-color: var(--accent-dark) !important;
 }}
 
-/* 3) 메인 페이지 버튼 - 큰 패딩 */
+/* 메인 페이지 버튼 - 큰 패딩 */
 section.main button,
 .main button,
 div[data-testid="stMain"] button {{
     border-radius: 12px !important;
-    padding: 14px 22px !important;
+    padding: 13px 22px !important;
     font-size: 15px !important;
 }}
 
-/* 4) 사이드바 버튼 - 좌측정렬, 풀너비 */
+/* 사이드바 버튼 - 좌측정렬 */
 section[data-testid="stSidebar"] button {{
     width: 100% !important;
     text-align: left !important;
     border-radius: 10px !important;
-    padding: 14px 16px !important;
-    font-size: 15px !important;
+    padding: 13px 14px !important;
+    font-size: 14px !important;
     margin-bottom: 4px !important;
 }}
 section[data-testid="stSidebar"] button[kind="secondary"] {{
@@ -260,44 +279,55 @@ section[data-testid="stSidebar"] button[kind="secondary"] {{
     border-color: transparent !important;
 }}
 section[data-testid="stSidebar"] button[kind="secondary"]:hover {{
-    background-color: var(--accent-soft) !important;
+    background-color: var(--accent-softer) !important;
     border-color: transparent !important;
 }}
 
 /* =========================================================
-   CARD
+   CARD — 네이버 부드러운 그림자
    ========================================================= */
 .tcard {{
     background-color: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 20px 24px;
+    border-radius: 14px;
+    padding: 18px 22px;
     margin-bottom: 12px;
-    transition: all 0.15s;
+    transition: all 0.18s ease;
+    box-shadow: var(--shadow-sm);
 }}
 .tcard:hover {{
     border-color: var(--accent);
-    box-shadow: 0 4px 12px rgba(233, 30, 99, 0.08);
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-1px);
 }}
 
 /* =========================================================
-   FORM INPUTS
+   FORM INPUTS — 네이버 스타일
    ========================================================= */
 div[data-baseweb="select"] > div,
 div[data-baseweb="input"] {{
     background-color: var(--surface) !important;
     border-color: var(--border) !important;
     border-radius: 10px !important;
-    min-height: 44px !important;
+    min-height: 46px !important;
+    transition: border-color 0.15s !important;
+}}
+div[data-baseweb="select"]:focus-within > div,
+div[data-baseweb="input"]:focus-within {{
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 3px var(--accent-softer) !important;
 }}
 div[data-baseweb="select"] *,
 div[data-baseweb="input"] input {{
     color: var(--text) !important;
     -webkit-text-fill-color: var(--text) !important;
+    font-size: 15px !important;
 }}
 
-/* number input 화살표 */
-input[type="number"] {{ color: var(--text) !important; }}
+input[type="number"], input[type="text"], input[type="password"] {{
+    color: var(--text) !important;
+    font-size: 15px !important;
+}}
 
 /* =========================================================
    METRIC
@@ -330,54 +360,70 @@ details > summary,
     background-color: var(--surface) !important;
     color: var(--text) !important;
     border: 1px solid var(--border) !important;
-    border-radius: 10px !important;
+    border-radius: 12px !important;
     font-size: 14px !important;
-    font-weight: 700 !important;
-    padding: 12px 16px !important;
+    font-weight: 600 !important;
+    padding: 14px 18px !important;
+    transition: all 0.15s !important;
+}}
+[data-testid="stExpander"] summary:hover {{
+    border-color: var(--accent) !important;
+    background-color: var(--accent-softer) !important;
 }}
 [data-testid="stExpander"] summary p,
 [data-testid="stExpander"] summary * {{
     color: var(--text) !important;
+    font-weight: 600 !important;
 }}
 
 /* =========================================================
-   TAB
+   TAB — 네이버 언더라인 스타일
    ========================================================= */
 button[data-baseweb="tab"] {{
     color: var(--text-2) !important;
     font-weight: 600 !important;
+    font-size: 14px !important;
+    padding: 12px 18px !important;
 }}
 button[data-baseweb="tab"][aria-selected="true"] {{
-    color: var(--accent) !important;
-    border-bottom-color: var(--accent) !important;
+    color: var(--accent-dark) !important;
+}}
+[data-baseweb="tab-highlight"] {{
+    background-color: var(--accent) !important;
+    height: 3px !important;
+    border-radius: 2px !important;
 }}
 
 /* =========================================================
-   ALERT
+   ALERT (Toast)
    ========================================================= */
 div[data-testid="stAlertContainer"] {{
     border-radius: 12px !important;
-    border: none !important;
+    border: 1px solid transparent !important;
     padding: 14px 18px !important;
 }}
 div[data-testid="stAlertContainer"][kind="info"] {{
-    background-color: var(--accent-soft) !important;
+    background-color: var(--accent-softer) !important;
+    border-color: var(--accent-soft) !important;
 }}
 div[data-testid="stAlertContainer"][kind="success"] {{
     background-color: var(--accent-soft) !important;
+    border-color: var(--accent) !important;
 }}
 div[data-testid="stAlertContainer"][kind="warning"] {{
-    background-color: rgba(245, 158, 11, 0.1) !important;
+    background-color: {t['warn_soft']} !important;
+    border-color: {t['warn']} !important;
 }}
 div[data-testid="stAlertContainer"][kind="error"] {{
-    background-color: rgba(220, 38, 38, 0.1) !important;
+    background-color: var(--up-soft) !important;
+    border-color: var(--up) !important;
 }}
 div[data-testid="stAlertContainer"] * {{
     color: var(--text) !important;
 }}
 
 /* =========================================================
-   DATAFRAME
+   DATAFRAME / TABLE
    ========================================================= */
 div[data-testid="stDataFrame"] {{
     border: 1px solid var(--border) !important;
@@ -385,15 +431,16 @@ div[data-testid="stDataFrame"] {{
 }}
 
 /* =========================================================
-   PROGRESS
+   PROGRESS — 그라데이션
    ========================================================= */
 .stProgress > div > div {{
-    background-color: var(--accent) !important;
+    background: var(--gradient) !important;
     border-radius: 4px;
 }}
 .stProgress {{
     background-color: var(--border);
     height: 6px;
+    border-radius: 4px;
 }}
 
 /* =========================================================
@@ -401,14 +448,14 @@ div[data-testid="stDataFrame"] {{
    ========================================================= */
 .up {{ color: var(--up) !important; font-weight: 700; }}
 .down {{ color: var(--down) !important; font-weight: 700; }}
-.accent {{ color: var(--accent) !important; }}
+.accent {{ color: var(--accent-dark) !important; }}
 .muted {{ color: var(--text-2) !important; }}
 .subtle {{ color: var(--text-3) !important; }}
 
 .badge {{
     display: inline-block;
     background-color: var(--accent-soft);
-    color: var(--accent);
+    color: var(--accent-dark);
     padding: 4px 10px;
     border-radius: 8px;
     font-size: 12px;
@@ -433,27 +480,29 @@ div[data-testid="stDataFrame"] {{
 }}
 
 .big-number {{
-    font-size: 36px;
+    font-size: 32px;
     font-weight: 800;
     letter-spacing: -1px;
     line-height: 1.2;
 }}
 .big-number-label {{
-    font-size: 13px;
-    color: var(--text-2);
+    font-size: 12px;
+    color: var(--text-3);
     margin-bottom: 4px;
-    font-weight: 500;
+    font-weight: 600;
+    letter-spacing: 0.2px;
 }}
 
 hr {{ border-color: var(--border); margin: 24px 0; }}
 
 code {{
-    background-color: var(--accent-soft);
-    color: var(--accent);
+    background-color: var(--accent-softer);
+    color: var(--accent-dark);
     padding: 2px 8px;
     border-radius: 6px;
     font-size: 0.85em;
-    border: 1px solid var(--border);
+    border: 1px solid var(--accent-soft);
+    font-family: 'JetBrains Mono', 'D2Coding', monospace;
 }}
 
 /* Streamlit chrome 숨김 */
@@ -461,6 +510,66 @@ footer, #MainMenu, header[data-testid="stHeader"] {{
     visibility: hidden !important;
     height: 0 !important;
 }}
+
+/* =========================================================
+   📱 모바일 반응형 (768px 이하 — 태블릿)
+   ========================================================= */
+@media (max-width: 768px) {{
+    .block-container {{
+        padding-left: 14px !important;
+        padding-right: 14px !important;
+        padding-top: 18px !important;
+    }}
+    h1 {{ font-size: 22px !important; }}
+    h2 {{ font-size: 17px !important; }}
+    h3 {{ font-size: 15px !important; }}
+    .tcard {{ padding: 14px 16px !important; border-radius: 12px !important; }}
+    .big-number {{ font-size: 26px !important; }}
+    section.main button,
+    .main button {{
+        padding: 12px 18px !important;
+        font-size: 14px !important;
+    }}
+    /* 모바일에서 데이터프레임 가로 스크롤 가능 */
+    div[data-testid="stDataFrame"] {{
+        overflow-x: auto !important;
+    }}
+    table {{
+        font-size: 11px !important;
+    }}
+    table th, table td {{
+        padding: 6px 4px !important;
+    }}
+}}
+
+/* =========================================================
+   📱 모바일 반응형 (480px 이하 — 폰)
+   ========================================================= */
+@media (max-width: 480px) {{
+    .block-container {{
+        padding-left: 10px !important;
+        padding-right: 10px !important;
+    }}
+    h1 {{ font-size: 20px !important; }}
+    .tcard {{ padding: 12px 14px !important; }}
+    .big-number {{ font-size: 22px !important; }}
+    /* 사이드바 자동 닫힘은 Streamlit 기본 동작 */
+    table {{ font-size: 10px !important; }}
+    table th, table td {{ padding: 5px 3px !important; }}
+    /* 카드 그리드 1열로 */
+    [data-testid="column"] {{
+        width: 100% !important;
+        flex: 0 0 100% !important;
+    }}
+}}
+
+/* =========================================================
+   접근성 — 다크모드 대비
+   ========================================================= */
+@media (prefers-color-scheme: dark) {{
+    /* 다크모드 자동 감지는 사용자 토글로 처리 */
+}}
+
 </style>
 """
 
@@ -469,10 +578,16 @@ def get_logo_html(mode: str = "light") -> str:
     t = TOKENS[mode]
     return (
         f'<div style="padding:0 4px 28px 4px;">'
-        f'<div style="display:flex;align-items:center;gap:10px;">'
-        f'<div style="width:6px;height:28px;background:{t["accent"]};border-radius:3px;"></div>'
+        f'<div style="display:flex;align-items:center;gap:12px;">'
+        f'<div style="width:34px;height:34px;background:linear-gradient(135deg,{t["gradient_start"]} 0%,{t["gradient_end"]} 100%);'
+        f'border-radius:10px;display:flex;align-items:center;justify-content:center;'
+        f'box-shadow:0 2px 8px rgba(3,199,90,0.25);">'
+        f'<span style="color:#FFFFFF;font-weight:900;font-size:18px;letter-spacing:-1px;">N</span>'
+        f'</div>'
         f'<div>'
-        f'<div style="font-size:17px;font-weight:800;color:{t["text"]};line-height:1.2;">종가매수</div>'
-        f'<div style="font-size:10px;color:{t["text_3"]};letter-spacing:0.5px;font-weight:600;">MARKET CLOSE TRADING</div>'
+        f'<div style="font-size:16px;font-weight:800;color:{t["text"]};line-height:1.2;letter-spacing:-0.4px;">'
+        f'NEO STOCK</div>'
+        f'<div style="font-size:10px;color:{t["text_3"]};letter-spacing:0.6px;font-weight:600;text-transform:uppercase;">'
+        f'V·S·A·B 등급제</div>'
         f'</div></div></div>'
     )
