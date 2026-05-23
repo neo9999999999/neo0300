@@ -3251,7 +3251,7 @@ def page_library():
     p = PALETTE[st.session_state.theme]
     st.markdown("<h1>사례 & 가이드</h1>", unsafe_allow_html=True)
 
-    sub_tabs = st.tabs(["🏆 V/S/A/B 등급 가이드", "🥇 V·S급 전체 리스트", "📚 실전 사례 35건", "📖 매매 가이드", "📋 워치리스트"])
+    sub_tabs = st.tabs(["🏆 V/S/A/B 등급 가이드", "🥇 V·S급 전체 리스트", "💯 TOP 100 수익률", "📚 실전 사례 35건", "📖 매매 가이드", "📋 워치리스트"])
 
     with sub_tabs[0]:
         st.markdown("<h2>V/S/A/B 등급 시스템</h2>", unsafe_allow_html=True)
@@ -3553,6 +3553,161 @@ def page_library():
             )
 
     with sub_tabs[2]:
+        # 💯 TOP 100 수익률
+        st.markdown("<h2>💯 TOP 100 수익률 — 등급 표시</h2>", unsafe_allow_html=True)
+        st.caption("6년간 가장 큰 수익을 낸 종목 100개 (등급 미달도 포함)")
+
+        with st.spinner("TOP 100 추출 중..."):
+            df_top = _load_vsab_history()
+
+        if df_top.empty:
+            st.warning("enriched 캐시 없음")
+        else:
+            # 보유기간/정렬 선택
+            cf = st.columns([1, 1, 1])
+            top_horizon = cf[0].selectbox(
+                "수익률 기준",
+                ["180일", "120일", "240일", "365일", "90일"],
+                key="top_horizon",
+            )
+            top_n = cf[1].selectbox("TOP N", [50, 100, 200, 300], index=1, key="top_n_show")
+            top_grade = cf[2].selectbox(
+                "등급 필터", ["전체", "V/S만", "V/S/A만", "V/S/A/B만", "등급미달만"],
+                key="top_grade_filter",
+            )
+
+            ret_col_map = {"90일": "ret_90d", "120일": "ret_120d",
+                            "180일": "ret_180d", "240일": "ret_240d", "365일": "ret_365d"}
+            ret_col = ret_col_map[top_horizon]
+            if ret_col not in df_top.columns:
+                ret_col = "ret_120d"
+
+            sub = df_top[df_top[ret_col].notna()].copy()
+
+            # 등급 필터
+            if top_grade == "V/S만":
+                sub = sub[sub["grade"].isin(["V", "S"])]
+            elif top_grade == "V/S/A만":
+                sub = sub[sub["grade"].isin(["V", "S", "A"])]
+            elif top_grade == "V/S/A/B만":
+                sub = sub[sub["grade"].notna()]
+            elif top_grade == "등급미달만":
+                sub = sub[sub["grade"].isna()]
+
+            top = sub.nlargest(top_n, ret_col).reset_index(drop=True)
+
+            # 등급 분포 통계
+            grade_dist = top["grade"].fillna("—").value_counts().to_dict()
+            st.markdown("##### 📊 등급 분포")
+            cd = st.columns(5)
+            cd[0].metric("🏆 V급", grade_dist.get("V", 0))
+            cd[1].metric("💎 S급", grade_dist.get("S", 0))
+            cd[2].metric("⭐ A급", grade_dist.get("A", 0))
+            cd[3].metric("🟢 B급", grade_dist.get("B", 0))
+            cd[4].metric("⚪ 등급미달", grade_dist.get("—", 0))
+
+            # 통계
+            avg = top[ret_col].mean()
+            max_ret = top[ret_col].max()
+            min_ret = top[ret_col].min()
+            st.caption(f"💡 평균 {avg:+.1f}% · 최대 {max_ret:+.1f}% · 최소(TOP {top_n}) {min_ret:+.1f}%")
+
+            # 표 렌더링 (등급 색상 적용)
+            st.markdown("---")
+            UP = "#F04452"; DOWN = "#1F8FFF"
+            rows_html = ""
+            for i, r in top.iterrows():
+                g = r.get("grade") if pd.notna(r.get("grade")) else None
+                rank = i + 1
+
+                # 등급 배지
+                if g == "V":
+                    grade_bg = "linear-gradient(135deg,#FFD700 0%,#FFA500 100%)"
+                    grade_html = f'<span style="background:{grade_bg};color:#FFFFFF;padding:3px 8px;border-radius:8px;font-size:11px;font-weight:800;">🏆 V</span>'
+                elif g == "S":
+                    grade_html = '<span style="background:linear-gradient(135deg,#03C75A 0%,#00C73C 100%);color:#FFFFFF;padding:3px 8px;border-radius:8px;font-size:11px;font-weight:800;">💎 S</span>'
+                elif g == "A":
+                    grade_html = '<span style="background:#FF73B8;color:#FFFFFF;padding:3px 8px;border-radius:8px;font-size:11px;font-weight:800;">⭐ A</span>'
+                elif g == "B":
+                    grade_html = '<span style="background:#03C75A;color:#FFFFFF;padding:3px 8px;border-radius:8px;font-size:11px;font-weight:800;">🟢 B</span>'
+                else:
+                    grade_html = '<span style="background:var(--surface-alt);color:var(--text-3);padding:3px 8px;border-radius:8px;font-size:11px;font-weight:700;">⚪ —</span>'
+
+                ret_val = r[ret_col]
+                ret_color = UP if ret_val > 0 else DOWN
+                ch_color = UP if r["ChangeRatio"] > 0 else DOWN
+                date_str = pd.Timestamp(r["Date"]).strftime("%Y-%m-%d")
+
+                # 순위 표시
+                if rank <= 3:
+                    medals = ["🥇", "🥈", "🥉"]
+                    rank_html = f'<span style="font-size:14px;font-weight:900;">{medals[rank-1]} {rank}</span>'
+                elif rank <= 10:
+                    rank_html = f'<span style="font-size:13px;font-weight:800;color:var(--accent-dark);">{rank}위</span>'
+                else:
+                    rank_html = f'<span style="font-size:12px;color:var(--text-2);">{rank}위</span>'
+
+                rows_html += "<tr>"
+                rows_html += f'<td style="padding:8px;text-align:center;">{rank_html}</td>'
+                rows_html += f'<td style="padding:8px;color:var(--text-2);font-size:11px;">{date_str}</td>'
+                rows_html += f'<td style="padding:8px;text-align:center;">{grade_html}</td>'
+                rows_html += (
+                    f'<td style="padding:8px;">'
+                    f'<div style="font-weight:700;color:var(--text);">{r["Name"]}</div>'
+                    f'<div style="font-size:10px;color:var(--text-3);">{r["Code"]} · {r.get("Market","")}</div>'
+                    f'</td>'
+                )
+                rows_html += f'<td style="padding:8px;text-align:right;font-weight:600;">{int(r["Close"]):,}원</td>'
+                rows_html += f'<td style="padding:8px;text-align:right;color:{ch_color};font-weight:700;">{r["ChangeRatio"]:+.1f}%</td>'
+                rows_html += f'<td style="padding:8px;text-align:center;font-weight:600;">{r["avg_score"]:.1f}</td>'
+                rows_html += f'<td style="padding:8px;text-align:right;color:{ret_color};font-weight:800;font-size:13px;">{ret_val:+.1f}%</td>'
+                rows_html += "</tr>"
+
+            st.markdown(
+                '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow-sm);">'
+                '<table style="width:100%;border-collapse:collapse;font-size:12px;">'
+                '<thead><tr style="background:var(--surface-alt);">'
+                '<th style="padding:10px;text-align:center;font-weight:700;">순위</th>'
+                '<th style="padding:10px;text-align:left;font-weight:700;">매수일</th>'
+                '<th style="padding:10px;text-align:center;font-weight:700;">등급</th>'
+                '<th style="padding:10px;text-align:left;font-weight:700;">종목</th>'
+                '<th style="padding:10px;text-align:right;font-weight:700;">매수가</th>'
+                '<th style="padding:10px;text-align:right;font-weight:700;">당일</th>'
+                '<th style="padding:10px;text-align:center;font-weight:700;">점수</th>'
+                f'<th style="padding:10px;text-align:right;font-weight:700;">{top_horizon}수익</th>'
+                '</tr></thead>'
+                f'<tbody>{rows_html}</tbody></table></div>',
+                unsafe_allow_html=True,
+            )
+
+            # CSV 다운로드
+            st.markdown("<div style='height:14px;'></div>", unsafe_allow_html=True)
+            csv_cols = ["Date", "grade", "Name", "Code", "Market", "Close",
+                          "ChangeRatio", "avg_score", "n_presets",
+                          "ret_120d", "ret_180d", "ret_240d", "ret_365d"]
+            csv_cols = [c for c in csv_cols if c in top.columns]
+            csv_df = top[csv_cols].copy()
+            csv_df.insert(0, "순위", range(1, len(csv_df) + 1))
+            csv_df["Date"] = csv_df["Date"].dt.strftime("%Y-%m-%d")
+            csv = csv_df.to_csv(index=False).encode("utf-8-sig")
+            st.download_button(
+                f"📥 TOP {top_n} CSV 다운로드", csv,
+                file_name=f"TOP{top_n}_{top_horizon}_{datetime.now():%Y%m%d}.csv",
+                use_container_width=True,
+                key="top100_csv",
+            )
+
+            # 인사이트
+            st.markdown("---")
+            st.markdown("##### 💡 인사이트")
+            st.markdown(
+                f"- **등급 미달이 {grade_dist.get('—', 0)}건**: KOSPI 또는 등락률 7~25% 범위 밖이라 V/S/A/B 시스템에서 빠짐\n"
+                f"- **B급이 가장 많음**: 등급 시스템의 베이스 픽이 슈퍼위너를 가장 잘 잡음\n"
+                f"- **V급은 점수가 높지만 슈퍼위너 비율은 B급보다 낮음**: 점수와 폭발력은 다름\n"
+                f"- 등급 미달 종목도 포함하려면 등급 기준 완화 (예: KOSPI 허용, 등락률 5~30%) 고려"
+            )
+
+    with sub_tabs[3]:
         st.markdown("<h2>📚 실전 사례 35건</h2>", unsafe_allow_html=True)
         st.caption("하바로셀/하승훈 검증된 실전 사례 — V/S/A/B 등급과 함께 참고")
         filter_pat = st.selectbox(
@@ -3584,14 +3739,14 @@ def page_library():
                 st.markdown(f"**💡 교훈**: {case['lesson']}")
                 st.caption(f"출처: {case['source']}")
 
-    with sub_tabs[3]:
+    with sub_tabs[4]:
         try:
             with open("docs/master_guide.md", "r") as f:
                 st.markdown(f.read())
         except FileNotFoundError:
             st.error("가이드 파일 없음")
 
-    with sub_tabs[4]:
+    with sub_tabs[5]:
         sub_inner = st.tabs(["🎓 하바로셀", "📺 하승훈", "⭐ 사용자", "🏷️ 테마"])
         with sub_inner[0]:
             df = koreanize_dataframe(pd.DataFrame(HABAROCELL_PICKS))
