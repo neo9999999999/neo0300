@@ -2327,6 +2327,75 @@ def _render_vsab_flat_table(df: pd.DataFrame, ret_col: str, sort_mode: str, max_
     )
 
 
+def _render_vs_table_rows(df_show: pd.DataFrame, ret_col: str, ret_label: str):
+    """V/S급 종목 표 렌더링 (네이버 그린 스타일)."""
+    if df_show.empty:
+        st.caption("표시할 종목 없음")
+        return
+    UP = "#F04452"; DOWN = "#1F8FFF"
+    rows_html = ""
+    for _, r in df_show.iterrows():
+        grade = r["grade"]
+        # 등급 색상
+        if grade == "V":
+            grade_bg = "linear-gradient(135deg,#FFD700 0%,#FFA500 100%)"
+            grade_emoji = "🏆"
+        else:
+            grade_bg = "linear-gradient(135deg,#03C75A 0%,#00C73C 100%)"
+            grade_emoji = "💎"
+
+        ret_val = r.get(ret_col)
+        if pd.notna(ret_val) and ret_val != 0:
+            ret_color = UP if ret_val > 0 else DOWN
+            ret_str = f"{ret_val:+.1f}%"
+        else:
+            ret_color = "var(--text-3)"
+            ret_str = "—"
+
+        date_str = pd.Timestamp(r["Date"]).strftime("%Y-%m-%d")
+        ch_color = UP if r["ChangeRatio"] > 0 else DOWN
+
+        rows_html += "<tr>"
+        rows_html += f'<td style="padding:8px;color:var(--text-2);font-size:11px;">{date_str}</td>'
+        rows_html += (
+            f'<td style="padding:8px;">'
+            f'<span style="display:inline-flex;align-items:center;gap:4px;'
+            f'background:{grade_bg};color:#FFFFFF;padding:3px 8px;border-radius:8px;'
+            f'font-size:11px;font-weight:800;">{grade_emoji} {grade}</span>'
+            f'</td>'
+        )
+        rows_html += (
+            f'<td style="padding:8px;">'
+            f'<div style="font-weight:700;color:var(--text);">{r["Name"]}</div>'
+            f'<div style="font-size:10px;color:var(--text-3);">{r["Code"]} · {r.get("Market", "")}</div>'
+            f'</td>'
+        )
+        rows_html += f'<td style="padding:8px;text-align:right;font-weight:600;">{int(r["Close"]):,}원</td>'
+        rows_html += f'<td style="padding:8px;text-align:right;color:{ch_color};font-weight:700;">{r["ChangeRatio"]:+.1f}%</td>'
+        rows_html += f'<td style="padding:8px;text-align:center;font-weight:700;">{r["avg_score"]:.1f}</td>'
+        rows_html += f'<td style="padding:8px;text-align:center;">{int(r["n_presets"])}/4</td>'
+        rows_html += f'<td style="padding:8px;text-align:right;color:{ret_color};font-weight:800;">{ret_str}</td>'
+        rows_html += "</tr>"
+
+    st.markdown(
+        '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:12px;'
+        'box-shadow:var(--shadow-sm);">'
+        '<table style="width:100%;border-collapse:collapse;font-size:12px;">'
+        '<thead><tr style="background:var(--surface-alt);">'
+        '<th style="padding:10px;text-align:left;font-weight:700;">매수일</th>'
+        '<th style="padding:10px;text-align:left;font-weight:700;">등급</th>'
+        '<th style="padding:10px;text-align:left;font-weight:700;">종목</th>'
+        '<th style="padding:10px;text-align:right;font-weight:700;">매수가</th>'
+        '<th style="padding:10px;text-align:right;font-weight:700;">당일</th>'
+        '<th style="padding:10px;text-align:center;font-weight:700;">점수</th>'
+        '<th style="padding:10px;text-align:center;font-weight:700;">프리셋</th>'
+        f'<th style="padding:10px;text-align:right;font-weight:700;">{ret_label}</th>'
+        '</tr></thead>'
+        f'<tbody>{rows_html}</tbody></table></div>',
+        unsafe_allow_html=True,
+    )
+
+
 def _render_vsab_summary(df_graded: pd.DataFrame, ret_col: str = "ret_180d"):
     """선택 기간 통계 요약 — 등급별 / 전체. 모든 종목 표시 모드."""
     if df_graded.empty:
@@ -3182,7 +3251,7 @@ def page_library():
     p = PALETTE[st.session_state.theme]
     st.markdown("<h1>사례 & 가이드</h1>", unsafe_allow_html=True)
 
-    sub_tabs = st.tabs(["🏆 V/S/A/B 등급 가이드", "📚 실전 사례 35건", "📖 매매 가이드", "📋 워치리스트"])
+    sub_tabs = st.tabs(["🏆 V/S/A/B 등급 가이드", "🥇 V·S급 전체 리스트", "📚 실전 사례 35건", "📖 매매 가이드", "📋 워치리스트"])
 
     with sub_tabs[0]:
         st.markdown("<h2>V/S/A/B 등급 시스템</h2>", unsafe_allow_html=True)
@@ -3376,6 +3445,114 @@ def page_library():
         """)
 
     with sub_tabs[1]:
+        # 🥇 V/S급 전체 리스트
+        st.markdown("<h2>🥇 V·S급 전체 리스트 — 년차순</h2>", unsafe_allow_html=True)
+        st.caption("2020~현재까지 V급(점수≥75) + S급(4프리셋 만장일치+점수≥65) 종목 전체")
+
+        # 데이터 빌드
+        with st.spinner("V/S급 데이터 로딩 중..."):
+            df_g = _load_vsab_history()
+        if df_g.empty:
+            st.warning("enriched 캐시 없음")
+        else:
+            vs = df_g[df_g["grade"].isin(["V", "S"])].copy()
+            vs["Year"] = vs["Date"].dt.year
+
+            # 필터 옵션
+            cf = st.columns([1, 1, 2])
+            grade_filter = cf[0].selectbox("등급", ["전체", "V급만", "S급만"], key="vs_grade_filter")
+            sort_order = cf[1].selectbox(
+                "정렬", ["오래된순", "최신순", "수익률↑", "수익률↓", "점수↑"],
+                key="vs_sort_order",
+            )
+            ret_horizon = cf[2].selectbox(
+                "수익률 기준",
+                ["180일", "120일", "240일", "365일", "90일"],
+                key="vs_ret_horizon",
+            )
+
+            # 필터 적용
+            if grade_filter == "V급만":
+                vs = vs[vs["grade"] == "V"]
+            elif grade_filter == "S급만":
+                vs = vs[vs["grade"] == "S"]
+
+            ret_col_map = {"90일": "ret_90d", "120일": "ret_120d",
+                            "180일": "ret_180d", "240일": "ret_240d", "365일": "ret_365d"}
+            ret_col = ret_col_map[ret_horizon]
+            if ret_col not in vs.columns:
+                ret_col = "ret_120d"
+
+            # 정렬
+            if sort_order == "오래된순":
+                vs = vs.sort_values(["Year", "grade", "avg_score"],
+                                     ascending=[True, True, False])
+            elif sort_order == "최신순":
+                vs = vs.sort_values(["Year", "grade", "avg_score"],
+                                     ascending=[False, True, False])
+            elif sort_order == "수익률↑":
+                vs = vs.sort_values(ret_col, ascending=True, na_position="last")
+            elif sort_order == "수익률↓":
+                vs = vs.sort_values(ret_col, ascending=False, na_position="last")
+            elif sort_order == "점수↑":
+                vs = vs.sort_values("avg_score", ascending=False)
+            vs = vs.reset_index(drop=True)
+
+            # 요약 통계
+            UP = "#F04452"; DOWN = "#1F8FFF"
+            n_v = (vs["grade"] == "V").sum()
+            n_s = (vs["grade"] == "S").sum()
+            avg_ret = vs[ret_col].mean() if ret_col in vs.columns else None
+            cc = st.columns(4)
+            cc[0].metric("V급", f"{n_v}건")
+            cc[1].metric("S급", f"{n_s}건")
+            cc[2].metric("총", f"{n_v + n_s}건")
+            if avg_ret is not None and not pd.isna(avg_ret):
+                cc[3].metric(f"평균 {ret_horizon} 수익", f"{avg_ret:+.1f}%")
+
+            # 년도순 그룹핑 출력 (오래된순/최신순일 때만)
+            st.markdown("---")
+            if sort_order in ("오래된순", "최신순"):
+                # 년도별 카드
+                for year, ydf in vs.groupby("Year", sort=(sort_order == "오래된순")):
+                    y_avg = ydf[ret_col].mean()
+                    y_color = UP if (pd.notna(y_avg) and y_avg > 0) else DOWN
+                    y_avg_str = f"{y_avg:+.1f}%" if pd.notna(y_avg) else "—"
+                    n_y_v = (ydf["grade"] == "V").sum()
+                    n_y_s = (ydf["grade"] == "S").sum()
+                    st.markdown(
+                        f'<div style="background:var(--accent-softer);padding:12px 18px;'
+                        f'border-left:4px solid var(--accent);border-radius:8px;'
+                        f'margin:20px 0 12px 0;">'
+                        f'<div style="font-size:18px;font-weight:800;color:var(--text);">'
+                        f'📅 {int(year)}년</div>'
+                        f'<div style="font-size:12px;color:var(--text-2);margin-top:4px;">'
+                        f'V {n_y_v}건 · S {n_y_s}건 · 평균 {ret_horizon} '
+                        f'<span style="color:{y_color};font-weight:700;">{y_avg_str}</span>'
+                        f'</div></div>',
+                        unsafe_allow_html=True,
+                    )
+                    _render_vs_table_rows(ydf, ret_col, ret_horizon)
+            else:
+                # 평면 표 (정렬은 위 기준)
+                _render_vs_table_rows(vs, ret_col, ret_horizon)
+
+            # CSV 다운로드
+            csv_cols = ["Date", "grade", "Name", "Code", "Market", "Close",
+                          "ChangeRatio", "avg_score", "n_presets",
+                          "ret_120d", "ret_180d", "ret_240d", "ret_365d"]
+            csv_cols = [c for c in csv_cols if c in vs.columns]
+            csv_df = vs[csv_cols].copy()
+            csv_df["Date"] = csv_df["Date"].dt.strftime("%Y-%m-%d")
+            csv = csv_df.to_csv(index=False).encode("utf-8-sig")
+            st.download_button(
+                "📥 V·S급 전체 CSV 다운로드", csv,
+                file_name=f"VS_grade_full_{datetime.now():%Y%m%d}.csv",
+                use_container_width=True,
+                key="vs_full_csv",
+            )
+
+    with sub_tabs[2]:
         st.markdown("<h2>📚 실전 사례 35건</h2>", unsafe_allow_html=True)
         st.caption("하바로셀/하승훈 검증된 실전 사례 — V/S/A/B 등급과 함께 참고")
         filter_pat = st.selectbox(
@@ -3407,14 +3584,14 @@ def page_library():
                 st.markdown(f"**💡 교훈**: {case['lesson']}")
                 st.caption(f"출처: {case['source']}")
 
-    with sub_tabs[2]:
+    with sub_tabs[3]:
         try:
             with open("docs/master_guide.md", "r") as f:
                 st.markdown(f.read())
         except FileNotFoundError:
             st.error("가이드 파일 없음")
 
-    with sub_tabs[3]:
+    with sub_tabs[4]:
         sub_inner = st.tabs(["🎓 하바로셀", "📺 하승훈", "⭐ 사용자", "🏷️ 테마"])
         with sub_inner[0]:
             df = koreanize_dataframe(pd.DataFrame(HABAROCELL_PICKS))

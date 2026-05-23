@@ -355,7 +355,8 @@ def build_ensemble_all_enriched() -> pd.DataFrame:
     }
     for c in ["Amount", "TradeType", "s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9", "s10", "s11", "s12",
               "vol_ratio", "candle_pct", "rs_ratio", "past_5d",
-              "ret_120d", "ret_d1_close", "ret_60d", "ret_90d", "ret_30d", "ret_20d"]:
+              "ret_120d", "ret_180d", "ret_240d", "ret_365d",
+              "ret_d1_close", "ret_60d", "ret_90d", "ret_30d", "ret_20d"]:
         if c in combined.columns:
             agg_dict[c] = (c, "first")
     grouped = combined.groupby(["Date", "Code"]).agg(**agg_dict).reset_index()
