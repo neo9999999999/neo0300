@@ -565,7 +565,44 @@ def render_stock_card(row):
 # =============================================================================
 # 페이지: 오늘의 종가매수 추천
 # =============================================================================
+def render_mobile_nav():
+    """모바일/데스크탑 모두에서 보이는 상단 가로 네비게이션.
+    데스크탑에서는 사이드바도 있지만, 모바일에서는 이게 메인 네비."""
+    items = [
+        ("📋 오늘", "today"),
+        ("📊 백테스트", "results"),
+        ("📚 가이드", "library"),
+        ("⚙️ 설정", "admin"),
+    ]
+    cur = st.session_state.get("page", "today")
+
+    # CSS: 모바일에서만 보이도록 (데스크탑은 사이드바로 충분)
+    st.markdown(
+        '<style>'
+        '#topnav-wrapper { display: none; }'
+        '@media (max-width: 900px) {'
+        '  #topnav-wrapper { display: block !important; margin: -8px 0 14px 0; }'
+        '  #topnav-wrapper [data-testid="column"] { padding: 0 2px !important; }'
+        '  #topnav-wrapper button { padding: 10px 4px !important; font-size: 12px !important; '
+        '    min-height: 44px !important; }'
+        '}'
+        '</style>'
+        '<div id="topnav-wrapper">',
+        unsafe_allow_html=True,
+    )
+    cc = st.columns(4)
+    for i, (label, key) in enumerate(items):
+        is_active = key == cur
+        btn_type = "primary" if is_active else "secondary"
+        if cc[i].button(label, key=f"mob_nav_{key}",
+                         use_container_width=True, type=btn_type):
+            st.session_state.page = key
+            st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
 def page_today():
+    render_mobile_nav()
     p = PALETTE[st.session_state.theme]
     st.markdown(
         f'<h1>오늘의 종가매수 추천 — V/S/A/B 등급제</h1>'
@@ -2407,6 +2444,7 @@ def _render_vsab_summary(df_graded: pd.DataFrame, ret_col: str = "ret_180d"):
 # 페이지: 백테스트 결과
 # =============================================================================
 def page_results():
+    render_mobile_nav()
     p = PALETTE[st.session_state.theme]
     st.markdown(
         '<h1>백테스트 결과 — V/S/A/B 등급제 (OOS 검증)</h1>'
@@ -3140,6 +3178,7 @@ def _render_top3_cards(cached, top3, medals):
 # 페이지: 사례 & 가이드
 # =============================================================================
 def page_library():
+    render_mobile_nav()
     p = PALETTE[st.session_state.theme]
     st.markdown("<h1>사례 & 가이드</h1>", unsafe_allow_html=True)
 
@@ -3396,6 +3435,7 @@ def page_library():
 # 어드민 페이지
 # =============================================================================
 def page_admin():
+    render_mobile_nav()
     p = PALETTE[st.session_state.theme]
     st.markdown(
         f'<h1>⚙️ 어드민 설정</h1>'

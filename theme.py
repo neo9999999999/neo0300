@@ -505,10 +505,86 @@ code {{
     font-family: 'JetBrains Mono', 'D2Coding', monospace;
 }}
 
-/* Streamlit chrome 숨김 */
-footer, #MainMenu, header[data-testid="stHeader"] {{
+/* Streamlit footer 숨김 (햄버거는 모바일 위해 유지) */
+footer, #MainMenu {{
     visibility: hidden !important;
     height: 0 !important;
+}}
+
+/* 데스크탑은 헤더 숨김, 모바일은 햄버거 메뉴 보이게 */
+@media (min-width: 769px) {{
+    header[data-testid="stHeader"] {{
+        visibility: hidden !important;
+        height: 0 !important;
+    }}
+}}
+@media (max-width: 768px) {{
+    header[data-testid="stHeader"] {{
+        background-color: var(--surface) !important;
+        height: 50px !important;
+        border-bottom: 1px solid var(--border);
+        z-index: 999 !important;
+    }}
+    /* 햄버거 메뉴 버튼 (사이드바 토글) — 잘 보이게 */
+    [data-testid="stSidebarCollapsedControl"],
+    [data-testid="stSidebarCollapseButton"],
+    button[kind="header"] {{
+        visibility: visible !important;
+        display: flex !important;
+        color: var(--accent-dark) !important;
+        background: var(--accent-softer) !important;
+        border-radius: 8px !important;
+        padding: 6px !important;
+    }}
+    [data-testid="stSidebarCollapsedControl"] svg,
+    [data-testid="stSidebarCollapseButton"] svg {{
+        color: var(--accent-dark) !important;
+        fill: var(--accent-dark) !important;
+        width: 24px !important;
+        height: 24px !important;
+    }}
+    /* 메인 컨테이너 상단 여백 — 헤더 가리지 않게 */
+    .block-container {{
+        padding-top: 70px !important;
+    }}
+}}
+
+/* =========================================================
+   📱 모바일 상단 가로 네비게이션 (sidebar fallback)
+   ========================================================= */
+.mobile-nav {{
+    display: none;
+    position: sticky;
+    top: 50px;
+    z-index: 998;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 8px 12px;
+    margin: -16px -14px 16px -14px;
+    overflow-x: auto;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+}}
+.mobile-nav-item {{
+    display: inline-block;
+    padding: 8px 16px;
+    margin-right: 6px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-2);
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    text-decoration: none;
+}}
+.mobile-nav-item.active {{
+    background: var(--gradient);
+    color: #FFFFFF !important;
+    border-color: var(--accent-dark);
+    box-shadow: 0 2px 6px rgba(3,199,90,0.20);
+}}
+@media (max-width: 768px) {{
+    .mobile-nav {{ display: block; }}
 }}
 
 /* =========================================================
