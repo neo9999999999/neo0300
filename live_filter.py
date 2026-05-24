@@ -1,17 +1,15 @@
 """
-실시간 필터링 모듈 - 매일 자동 갱신
-=================================
+실시간 필터링 - 시총 300 + SuperScore 통합 (최종판)
+=================================================
+매일 16:30 KST 갱신:
+1. chart_feats 시그널 풀에서 시총 300 필터
+2. 회피 6 적용
+3. RF 4분류기 + peak 회귀로 확률 계산
+4. SuperScore = p_sw×5 + p_100×2 + p_50×1 - p_loss×3
+5. 등급 부여 (★ 강력매수 / ○ 추천 / - 관망 / ⚠️ 손절위험)
+6. SuperScore TOP 5 + 가능성 태그 + 예상수익률
 
-매일 16:30 KST 갱신 흐름:
-1. daily_update.py → KRX/KIS로 OHLCV 캐시 갱신
-2. precompute_enriched.py → 4 프리셋 chart_feats 재계산
-3. collect_supply_demand_daily.py → 신규 종목 수급 추가
-4. collect_fundamentals_daily.py → 현재 시점 PER/PBR 갱신
-5. live_filter.py → 회피 6+v2 적용 + V/S/A/B 등급 → 추천 리스트
-
-추천 리스트 출력:
-- cache/today_picks.csv   - 오늘의 추천
-- cache/today_picks.json  - app.py에서 로드용
+산출: cache/today_picks.csv, week_picks.csv, month_picks.csv
 """
 
 import json
@@ -24,56 +22,44 @@ from datetime import datetime
 CACHE = Path("cache")
 
 
-def load_rf_model():
-    """RF 손절예측 모델 로드. 없으면 None."""
-    model_path = CACHE / "rf_loss_model.pkl"
-    meta_path = CACHE / "rf_features.json"
-    if not (model_path.exists() and meta_path.exists()):
-        return None, None
-    with open(model_path, "rb") as f:
-        model = pickle.load(f)
-    with open(meta_path) as f:
-        meta = json.load(f)
-    return model, meta
+def load_data():
+    feats = pd.read_parquet(CACHE / "chart_feats_v1.parquet")
+    feats["Date"] = pd.to_datetime(feats["Date"])
+    feats = feats[feats["Market"].isin(["KOSPI", "KOSDAQ"])].copy()
+    sd_path = CACHE / "supply_demand.parquet"
+    sd = pd.read_parquet(sd_path) if sd_path.exists() else pd.DataFrame()
+    if not sd.empty:
+        sd["Date"] = pd.to_datetime(sd["Date"])
+    cur_path = CACHE / "fundamentals_current.parquet"
+    cur = pd.read_parquet(cur_path) if cur_path.exists() else pd.DataFrame()
+    snap = pd.read_parquet(CACHE / "market_snapshot.parquet")
+    return feats, sd, cur, snap
 
 
-def load_strong_buy():
-    """필수 매수 종합 모델 (loss/sw/100+/50+/peak_reg)."""
+def apply_avoid_6(df):
+    """회피 6 (기본)"""
+    d = df.copy()
+    x1 = (d["chart_pattern"] == "pullback_recovery") & (d["slope60"] <= -1) & (d["pos_252_high"] <= -40)
+    x2 = (d["Market"] == "KOSPI") & (d["past_120"] <= -20) & (d["pos_252_high"] <= -40)
+    x3 = (d["s12"] >= 80) & (d["new_high_252"] == 1) & (d["past_120"] >= 50)
+    x4 = d["past_240"] >= 100
+    x5 = d["past_240"] >= 150
+    x6 = d["Amount"] >= 3000e8
+    mask = x1 | x2 | x3 | x4 | x5 | x6
+    return d[~mask].copy()
+
+
+def filter_top300(df, snap):
+    top300 = set(snap.sort_values("MarketCap", ascending=False).head(300)["Code"])
+    return df[df["Code"].isin(top300)].copy()
+
+
+def load_strong_buy_models():
     p = CACHE / "strong_buy_models.pkl"
     if not p.exists():
         return None
     with open(p, "rb") as f:
         return pickle.load(f)
-
-
-def apply_strong_buy_score(df, sd=None, cur=None):
-    """필수 매수 종합 점수 + 예상 peak 추가."""
-    sb = load_strong_buy()
-    if sb is None:
-        df["StrongScore"] = np.nan
-        df["예상peak%"] = np.nan
-        df["슈퍼위너확률%"] = np.nan
-        df["100%+확률"] = np.nan
-        df["50%+확률"] = np.nan
-        df["손절확률%"] = np.nan
-        return df
-    # 모델 입력 준비 (RF용 시계열특성 + 수급 + 펀더 이미 apply_rf_filter에서 추가했음 가정)
-    features = sb["features"]
-    X = df.reindex(columns=features).copy().replace([np.inf, -np.inf], np.nan)
-    X = X.fillna(X.median(numeric_only=True))
-    models = sb["models"]
-    df["손절확률%"] = (models["loss"].predict_proba(X)[:, 1] * 100).round(1)
-    df["슈퍼위너확률%"] = (models["sw"].predict_proba(X)[:, 1] * 100).round(1)
-    df["100%+확률"] = (models["100plus"].predict_proba(X)[:, 1] * 100).round(1)
-    df["50%+확률"] = (models["50plus"].predict_proba(X)[:, 1] * 100).round(1)
-    df["예상peak%"] = models["peak_reg"].predict(X).round(1)
-    df["StrongScore"] = (
-        df["슈퍼위너확률%"] * 3.0
-        + df["100%+확률"] * 1.5
-        + df["50%+확률"] * 1.0
-        - df["손절확률%"] * 2.0
-    ).round(1)
-    return df
 
 
 def add_pre_features_one(df, ohlcv_dict):
@@ -83,24 +69,22 @@ def add_pre_features_one(df, ohlcv_dict):
         "pre_10d_max_high_ratio","pre_10d_drawdown","pre_20d_vol_ratio",
         "gap_up_count_5d","long_red_count_5d","long_red_in_10d","consecutive_red_max",
     ]}
-    def append_nans():
-        for k in rows:
-            rows[k].append(np.nan)
+
+    def nans():
+        for k in rows: rows[k].append(np.nan)
 
     for _, r in df.iterrows():
         code = str(r["Code"])
         d0 = r["Date"]; c0 = r["Close"]
         if code not in ohlcv_dict:
-            code_padded = code.zfill(6) if code.isdigit() else code
-            if code_padded not in ohlcv_dict:
-                append_nans()
-                continue
-            code = code_padded
+            code_pad = code.zfill(6) if code.isdigit() else code
+            if code_pad not in ohlcv_dict:
+                nans(); continue
+            code = code_pad
         bars = ohlcv_dict[code]
         past = bars[bars.index < d0].tail(30)
         if len(past) < 10:
-            append_nans()
-            continue
+            nans(); continue
         p5 = past.tail(5); p10 = past.tail(10); p20 = past.tail(20)
         p60 = past.tail(60) if len(past)>=60 else past
         rows["pre_5d_max_high_ratio"].append(p5["High"].max()/c0)
@@ -126,22 +110,25 @@ def add_pre_features_one(df, ohlcv_dict):
     return df
 
 
-def apply_rf_filter(df, sd=None, cur=None, threshold_key="th20"):
-    """RF 손절예측 모델 적용 — 손절확률 ≥ threshold면 제외."""
-    model, meta = load_rf_model()
-    if model is None:
-        print("[RF] 모델 없음 — skip")
-        df["_RF손절확률"] = np.nan
-        df["_RF위험"] = 0
+def compute_supabilities(df, sd, cur):
+    """SuperScore + 4 RF 확률 + 등급 부여"""
+    sb = load_strong_buy_models()
+    if sb is None:
+        print("[경고] strong_buy_models.pkl 없음")
+        df["StrongScore"] = np.nan
+        df["SuperScore"] = np.nan
+        df["등급"] = "- 미정"
+        df["가능성태그"] = ""
+        df["예상수익률"] = ""
         return df
 
-    # OHLCV 로드 후 시계열 특성 추가
+    # OHLCV 로드 + 시계열 특성
     ohlcv_path = sorted(CACHE.glob("ohlcv_*.pkl"))[-1]
     with open(ohlcv_path, "rb") as f:
         ohlcv_dict = pickle.load(f)
     df = add_pre_features_one(df, ohlcv_dict)
 
-    # 외인20일 / 기관20일 매칭
+    # 수급 매칭
     if sd is not None and not sd.empty:
         sd_dict = {}
         for code in sd["Code"].unique():
@@ -159,168 +146,129 @@ def apply_rf_filter(df, sd=None, cur=None, threshold_key="th20"):
                     vals.append(np.nan)
             df[col] = vals
 
-    # 펀더멘털 매칭
+    # 펀더멘털
     if cur is not None and not cur.empty:
         cur_idx = cur.set_index("Code")[["PER_num","PBR_num","외인소진율_num"]]
         for c in ["PER_num","PBR_num","외인소진율_num"]:
             df[c] = df["Code"].map(cur_idx[c])
 
-    # 학습 시 사용된 특성 추출
-    features = meta["features"]
+    # RF 예측 (4 분류기 + peak 회귀)
+    features = sb["features"]
     X = df.reindex(columns=features).copy().replace([np.inf,-np.inf], np.nan)
     X = X.fillna(X.median(numeric_only=True))
-    # 학습 임계값
-    th = meta.get(threshold_key, 0.53)
-    probs = model.predict_proba(X)[:, 1]
-    df["_RF손절확률"] = probs
-    df["_RF위험"] = (probs >= th).astype(int)
+    models = sb["models"]
+
+    df["p_loss"] = models["loss"].predict_proba(X)[:, 1]
+    df["p_sw"] = models["sw"].predict_proba(X)[:, 1]
+    df["p_100plus"] = models["100plus"].predict_proba(X)[:, 1]
+    df["p_50plus"] = models["50plus"].predict_proba(X)[:, 1]
+    df["예상peak%"] = models["peak_reg"].predict(X).round(1)
+
+    # 확률 % 표시
+    df["슈퍼위너확률%"] = (df["p_sw"]*100).round(1)
+    df["100%+확률"] = (df["p_100plus"]*100).round(1)
+    df["50%+확률"] = (df["p_50plus"]*100).round(1)
+    df["손절확률%"] = (df["p_loss"]*100).round(1)
+
+    # 두 점수 (StrongScore + SuperScore)
+    df["StrongScore"] = (df["p_sw"]*3 + df["p_100plus"]*1.5 + df["p_50plus"]*1 - df["p_loss"]*2).round(2)
+    df["SuperScore"] = (df["p_sw"]*5 + df["p_100plus"]*2 + df["p_50plus"]*1 - df["p_loss"]*3).round(2)
+
+    # 등급 부여 (당일 내 StrongScore 분위)
+    df["_score_pct"] = df.groupby(df["Date"].dt.strftime("%Y-%m-%d"))["StrongScore"].rank(pct=True)
+    grades = []
+    for _, r in df.iterrows():
+        if r["p_loss"] >= 0.55:
+            grades.append("⚠️ 손절위험")
+        elif r["_score_pct"] >= 0.80:
+            grades.append("★ 강력매수")
+        elif r["_score_pct"] >= 0.60:
+            grades.append("○ 추천")
+        else:
+            grades.append("- 관망")
+    df["등급"] = grades
+
+    # 가능성 태그
+    tags = []
+    for _, r in df.iterrows():
+        t = []
+        if r["p_sw"] >= 0.20: t.append("🏆 슈퍼위너 강력후보")
+        elif r["p_sw"] >= 0.10: t.append("⭐ 슈퍼위너후보")
+        if r["p_100plus"] >= 0.30: t.append("💯 100%+ 가능")
+        if r["p_50plus"] >= 0.50: t.append("📈 50%+ 가능")
+        if 0.40 <= r["p_loss"] < 0.55: t.append("🔻 손절 주의")
+        tags.append(" / ".join(t) if t else "")
+    df["가능성태그"] = tags
+
+    # 예상 수익률 카테고리
+    cats = []
+    for v in df["예상peak%"]:
+        if v >= 100: cats.append(f"+{v:.0f}% (대박)")
+        elif v >= 50: cats.append(f"+{v:.0f}% (대상승)")
+        elif v >= 20: cats.append(f"+{v:.0f}% (상승)")
+        elif v >= 0: cats.append(f"+{v:.0f}% (보합)")
+        else: cats.append(f"{v:.0f}% (약세)")
+    df["예상수익률"] = cats
+
     return df
 
 
-def load_data():
-    """기본 데이터 로드."""
-    feats = pd.read_parquet(CACHE / "chart_feats_v1.parquet")
-    feats["Date"] = pd.to_datetime(feats["Date"])
-    feats = feats[feats["Market"].isin(["KOSPI", "KOSDAQ"])].copy()
-
-    sd_path = CACHE / "supply_demand.parquet"
-    sd = pd.read_parquet(sd_path) if sd_path.exists() else pd.DataFrame()
-    if not sd.empty:
-        sd["Date"] = pd.to_datetime(sd["Date"])
-
-    cur_path = CACHE / "fundamentals_current.parquet"
-    cur = pd.read_parquet(cur_path) if cur_path.exists() else pd.DataFrame()
-    return feats, sd, cur
-
-
-def apply_avoid_full(df, sd=None, cur=None, mode="v2"):
-    """회피 6 + 분석 결과 기반 보강
-
-    mode:
-      v2 - 회피6 + X7(외인20일 하위10%) + X13(강하락+52주高-50%↓) (SW 손실 최소)
-      v3 - v2 + 강화 P9(외인+기관 동시 순매수) — 100%+/50%+ 농도 ↑
-      v4 - v2 + 강화 P2(slope60≥0.5 상승추세) — SW 농도 ↑
-    """
-    d = df.copy()
-
-    # 회피 6개 (기존)
-    x1 = (d["chart_pattern"] == "pullback_recovery") & (d["slope60"] <= -1) & (d["pos_252_high"] <= -40)
-    x2 = (d["Market"] == "KOSPI") & (d["past_120"] <= -20) & (d["pos_252_high"] <= -40)
-    x3 = (d["s12"] >= 80) & (d["new_high_252"] == 1) & (d["past_120"] >= 50)
-    x4 = d["past_240"] >= 100
-    x5 = d["past_240"] >= 150
-    x6 = d["Amount"] >= 3000e8
-    mask = x1 | x2 | x3 | x4 | x5 | x6
-
-    # X13: 강하락추세+52주高-50%↓
-    mask |= (d["slope60"] <= -2) & (d["pos_252_high"] <= -50)
-
-    # 수급 매칭
-    if sd is not None and not sd.empty:
-        sd_dict = {}
-        for code in sd["Code"].unique():
-            sub = sd[sd["Code"] == code].sort_values("Date")
-            sd_dict[code] = sub.set_index("Date")[["Foreign_NetBuy", "Inst_NetBuy"]]
-        for_20, inst_20 = [], []
-        for code, dt in zip(d["Code"], d["Date"]):
-            if code in sd_dict:
-                sub = sd_dict[code]
-                past20 = sub[sub.index <= dt].tail(20)
-                for_20.append(past20["Foreign_NetBuy"].sum() if len(past20) else np.nan)
-                inst_20.append(past20["Inst_NetBuy"].sum() if len(past20) else np.nan)
-            else:
-                for_20.append(np.nan); inst_20.append(np.nan)
-        d["_for_20d"] = for_20
-        d["_inst_20d"] = inst_20
-        # X7: 외인 20일 누적 하위 10%
-        valid = d["_for_20d"].notna()
-        if valid.sum() > 100:
-            q10 = d.loc[valid, "_for_20d"].quantile(0.10)
-            mask |= (d["_for_20d"] < q10).fillna(False)
-
-    # 펀더멘털
-    if cur is not None and not cur.empty:
-        cur_idx = cur.set_index("Code")[["PER_num", "PBR_num", "시총_num"]]
-        d["_PER"] = d["Code"].map(cur_idx["PER_num"])
-        d["_PBR"] = d["Code"].map(cur_idx["PBR_num"])
-        d["_시총"] = d["Code"].map(cur_idx["시총_num"])
-
-    out = d[~mask].copy()
-
-    # 강화(포함) 룰
-    if mode == "v3":
-        # P9: 외인+기관 동시 20일 누적 순매수
-        if "_for_20d" in out.columns:
-            out = out[(out["_for_20d"] > 0) & (out["_inst_20d"] > 0)]
-    elif mode == "v4":
-        # P2: slope60 ≥ 0.5
-        out = out[out["slope60"] >= 0.5]
-
-    return out
-
-
-def build_picks_for_period(feats, sd, cur, since_date, until_date, label,
-                            use_rf=True, rf_threshold="th20", top_n=20):
-    """기간 누적 시그널 추천 (since~until)."""
-    sub = feats[(feats["Date"] >= since_date) & (feats["Date"] <= until_date)].copy()
-    if len(sub) == 0:
-        return pd.DataFrame(), 0
-    filtered = apply_avoid_full(sub, sd, cur)
-    n_after_avoid = len(filtered)
-    if use_rf and n_after_avoid > 0:
-        filtered = apply_rf_filter(filtered, sd, cur, threshold_key=rf_threshold)
-        filtered = filtered[filtered["_RF위험"] == 0].copy()
-    # 중복 제거 + 거래대금 낮은 순
-    if len(filtered) > 0:
-        filtered = filtered.sort_values("Score", ascending=False).drop_duplicates(["Date", "Code"])
-        filtered = filtered.sort_values("Amount").head(top_n)
-    return filtered, n_after_avoid
-
-
-def build_all_picks(top_today=10, top_week=3, top_month=12,
-                     use_rf=True, rf_threshold="th20"):
-    """오늘 / 이번주 / 이번달 추천 한꺼번에 빌드."""
-    feats, sd, cur = load_data()
+def build_picks(top_n_today=5, top_n_week=5):
+    """오늘/이번주/이번달 추천 빌드 - SuperScore 기반"""
+    feats, sd, cur, snap = load_data()
     last_date = feats["Date"].max()
-    week_start = last_date - pd.Timedelta(days=last_date.weekday())  # 월요일
+
+    # 시총 300 필터
+    feats = filter_top300(feats, snap)
+    print(f"[시총 300 필터] {len(feats):,}건")
+
+    # 회피 6
+    feats = apply_avoid_6(feats)
+    print(f"[회피 6 적용] {len(feats):,}건")
+
+    # 기간별 시그널 추출
+    today = feats[feats["Date"] == last_date].copy()
+    week_start = last_date - pd.Timedelta(days=last_date.weekday())
     month_start = last_date.replace(day=1)
-    print(f"[기준일] {last_date.date()} (주시작 {week_start.date()}, 월시작 {month_start.date()})")
+    this_week = feats[(feats["Date"] >= week_start) & (feats["Date"] <= last_date)].copy()
+    this_month = feats[(feats["Date"] >= month_start) & (feats["Date"] <= last_date)].copy()
+
+    print(f"[기준일 {last_date.date()}] 오늘 {len(today)}, 이번주 {len(this_week)}, 이번달 {len(this_month)}")
+
+    # SuperScore 계산
+    if len(this_month) > 0:
+        this_month = compute_supabilities(this_month, sd, cur)
+        # 중복 제거 (Date+Code)
+        this_month = this_month.sort_values("SuperScore", ascending=False).drop_duplicates(["Date","Code"])
 
     # 오늘
-    today_picks, today_after_avoid = build_picks_for_period(
-        feats, sd, cur, last_date, last_date, "오늘",
-        use_rf=use_rf, rf_threshold=rf_threshold, top_n=top_today)
-    # 이번 주 (월~금)
-    week_picks, _ = build_picks_for_period(
-        feats, sd, cur, week_start, last_date, "이번주",
-        use_rf=use_rf, rf_threshold=rf_threshold, top_n=top_week)
-    # 이번 달
-    month_picks, _ = build_picks_for_period(
-        feats, sd, cur, month_start, last_date, "이번달",
-        use_rf=use_rf, rf_threshold=rf_threshold, top_n=top_month)
+    today_picks = this_month[this_month["Date"] == last_date].copy()
+    today_picks = today_picks.sort_values("SuperScore", ascending=False).head(top_n_today)
 
-    print(f"\n[오늘 추천 {len(today_picks)}건] (시그널 발생: {today_after_avoid}건 → RF회피 후)")
-    if len(today_picks):
-        print(today_picks[["Code", "Name", "Market", "Close", "Amount", "Score"]].to_string(index=False))
+    # 이번 주 TOP 5 (월~금 누적)
+    week_picks = this_month[(this_month["Date"] >= week_start)].copy()
+    week_picks = week_picks.sort_values("SuperScore", ascending=False).head(top_n_week)
 
-    print(f"\n[이번 주 TOP {len(week_picks)}건 — 주3건 룰]")
-    if len(week_picks):
-        print(week_picks[["Date", "Code", "Name", "Market", "Close", "Score"]].to_string(index=False))
+    # 이번 달 TOP 20
+    month_picks = this_month.sort_values("SuperScore", ascending=False).head(20)
 
-    print(f"\n[이번 달 TOP {len(month_picks)}건 — 월 12건 룰]")
-    if len(month_picks):
-        print(month_picks[["Date", "Code", "Name", "Market", "Close", "Score"]].to_string(index=False))
+    # 출력 컬럼
+    cols = ["Date","등급","가능성태그","예상수익률","Code","Name","Market","Close","Amount",
+            "SuperScore","StrongScore","예상peak%",
+            "슈퍼위너확률%","100%+확률","50%+확률","손절확률%",
+            "Score","chart_pattern","past_60","past_120","pos_252_high","slope60"]
 
-    # 저장
-    for picks, fname in [
-        (today_picks, "today_picks.csv"),
-        (week_picks, "week_picks.csv"),
-        (month_picks, "month_picks.csv"),
-    ]:
-        if len(picks):
-            picks = picks.copy()
-            picks["기준일"] = picks["Date"].dt.strftime("%Y-%m-%d")
-        picks.to_csv(CACHE / fname, index=False)
+    def save_picks(df, fname):
+        if len(df) == 0:
+            pd.DataFrame().to_csv(CACHE / fname, index=False); return
+        avail = [c for c in cols if c in df.columns]
+        out = df[avail].copy()
+        out["기준일"] = pd.to_datetime(out["Date"]).dt.strftime("%Y-%m-%d")
+        out.to_csv(CACHE / fname, index=False)
+
+    save_picks(today_picks, "today_picks.csv")
+    save_picks(week_picks, "week_picks.csv")
+    save_picks(month_picks, "month_picks.csv")
 
     # JSON
     summary = {
@@ -328,105 +276,24 @@ def build_all_picks(top_today=10, top_week=3, top_month=12,
         "base_date": last_date.strftime("%Y-%m-%d"),
         "week_start": week_start.strftime("%Y-%m-%d"),
         "month_start": month_start.strftime("%Y-%m-%d"),
-        "today": {"n": len(today_picks), "picks": today_picks.to_dict(orient="records")},
+        "today": {"n": len(today_picks), "picks": today_picks.head(20).to_dict(orient="records")},
         "week": {"n": len(week_picks), "picks": week_picks.to_dict(orient="records")},
         "month": {"n": len(month_picks), "picks": month_picks.to_dict(orient="records")},
     }
     with open(CACHE / "today_picks.json", "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2, default=str)
-    print(f"\n[저장] today/week/month picks csv + today_picks.json")
+
+    # 콘솔 출력
+    print(f"\n[오늘 TOP {len(today_picks)}건]")
+    if len(today_picks) > 0:
+        print(today_picks[["Code","Name","SuperScore","등급","예상peak%","가능성태그"]].to_string(index=False))
+
+    print(f"\n[이번 주 TOP {len(week_picks)}건]")
+    if len(week_picks) > 0:
+        print(week_picks[["Date","Code","Name","SuperScore","등급","예상peak%"]].to_string(index=False))
+
     return today_picks, week_picks, month_picks
 
 
-def build_today_picks(top_n=20, use_rf=True, rf_threshold="th20"):
-    """오늘 발생한 시그널 중 최종 추천.
-
-    파이프라인:
-      1. chart_feats 마지막 일자 시그널 로드
-      2. apply_avoid_full() - 회피 8개 + (X7 외인매도 + X13 강하락)
-      3. RF 손절예측 모델로 위험 종목 제외 (rf_threshold='th20' 상위 20%)
-      4. 동일 종목 중복 제거 + 거래대금 낮은 순 TOP N
-    """
-    feats, sd, cur = load_data()
-    last_date = feats["Date"].max()
-    today = feats[feats["Date"] == last_date].copy()
-    print(f"[기준일] {last_date.date()} 시그널 {len(today)}건")
-
-    # 1) 회피 룰 적용
-    filtered = apply_avoid_full(today, sd, cur)
-    print(f"[회피 8 적용 후] {len(filtered)}건")
-
-    # 2) RF 손절예측
-    if use_rf and len(filtered) > 0:
-        filtered = apply_rf_filter(filtered, sd, cur, threshold_key=rf_threshold)
-        n_before = len(filtered)
-        filtered_safe = filtered[filtered["_RF위험"] == 0].copy()
-        print(f"[RF 손절회피 ({rf_threshold}) 적용 후] {n_before} → {len(filtered_safe)}건 "
-              f"(위험 {(filtered['_RF위험']==1).sum()}건 제외)")
-        filtered = filtered_safe
-
-    # 2.5) 필수 매수 종합 점수 + 예상수익률
-    if len(filtered) > 0:
-        filtered = apply_strong_buy_score(filtered, sd, cur)
-
-    if len(filtered) == 0:
-        print("[알림] 오늘은 추천 종목 없음")
-        # 빈 결과 저장
-        with open(CACHE / "today_picks.json", "w", encoding="utf-8") as f:
-            json.dump({"updated_at": datetime.now().isoformat(),
-                       "base_date": last_date.strftime("%Y-%m-%d"),
-                       "n_picks": 0, "picks": []}, f, ensure_ascii=False, indent=2)
-        pd.DataFrame().to_csv(CACHE / "today_picks.csv", index=False)
-        return pd.DataFrame()
-
-    # 3) 동일 종목 중복 제거 + 거래대금 낮은 순
-    filtered = filtered.sort_values("Score", ascending=False).drop_duplicates("Code")
-    filtered = filtered.sort_values("Amount").head(top_n)
-
-    # 4) 등급 + 가능성 태그 + 예상수익률
-    if "StrongScore" in filtered.columns and len(filtered) > 0:
-        from recommendation_grader import assign_grades, add_predicted_returns
-        # p_loss/p_sw/p_100plus/p_50plus/peak_pred 표준 컬럼
-        filtered["p_loss"] = filtered.get("손절확률%", 0) / 100.0
-        filtered["p_sw"] = filtered.get("슈퍼위너확률%", 0) / 100.0
-        filtered["p_100plus"] = filtered.get("100%+확률", 0) / 100.0
-        filtered["p_50plus"] = filtered.get("50%+확률", 0) / 100.0
-        filtered["peak_pred"] = filtered.get("예상peak%", 0)
-        filtered = assign_grades(filtered, scope="day")
-        filtered = add_predicted_returns(filtered)
-        filtered = filtered.sort_values("StrongScore", ascending=False)
-
-    out_cols = ["Date", "등급", "가능성태그", "예상수익률", "Code", "Name", "Market",
-                "Close", "Amount", "Score", "StrongScore", "예상peak%",
-                "슈퍼위너확률%", "100%+확률", "50%+확률", "손절확률%",
-                "chart_pattern", "past_60", "past_120", "pos_252_high",
-                "slope60", "drawdown60"]
-    extra = [c for c in ["_for_20d", "_inst_20d", "_PER", "_PBR",
-                         "_RF손절확률", "_RF위험"] if c in filtered.columns]
-    out_cols.extend(extra)
-    out_cols = [c for c in out_cols if c in filtered.columns]
-
-    picks = filtered[out_cols].copy()
-    picks["기준일"] = picks["Date"].dt.strftime("%Y-%m-%d")
-    picks.to_csv(CACHE / "today_picks.csv", index=False)
-
-    picks_dict = picks.to_dict(orient="records")
-    with open(CACHE / "today_picks.json", "w", encoding="utf-8") as f:
-        json.dump({
-            "updated_at": datetime.now().isoformat(),
-            "base_date": last_date.strftime("%Y-%m-%d"),
-            "n_picks": len(picks),
-            "use_rf": use_rf,
-            "rf_threshold": rf_threshold,
-            "picks": picks_dict,
-        }, f, ensure_ascii=False, indent=2, default=str)
-
-    print(f"[저장] cache/today_picks.csv ({len(picks)}건)")
-    return picks
-
-
 if __name__ == "__main__":
-    picks = build_today_picks(top_n=20)
-    if len(picks):
-        print("\n[오늘의 추천]")
-        print(picks[["Code", "Name", "Close", "Amount", "Score"]].to_string(index=False))
+    build_picks(top_n_today=5, top_n_week=5)

@@ -1,0 +1,27 @@
+[1/6] 시그널 풀 통합 (시총 300, 2020-2026)
+  통합 풀: 38,793건 (2020-04-06 ~ 2026-05-21)
+
+[2/6] 보조지표 50+ 계산
+  종목별 보조지표 계산...
+    50/290 (0s)
+    100/290 (1s)
+    150/290 (1s)
+    200/290 (2s)
+    250/290 (2s)
+  완료. 290종목, 3s
+  시그널에 보조지표 매칭...
+  매칭 완료. 473s
+  총 특성 수: 85
+
+[3/6] 다중 타깃 walk-forward
+  Walk ~2021 → 2022 | Train 5,121 / Test 5,180
+Traceback (most recent call last):
+  File "/Users/neo/Desktop/jongga_picker/master_analysis.py", line 280, in <module>
+    models = train_window(train)
+  File "/Users/neo/Desktop/jongga_picker/master_analysis.py", line 252, in train_window
+    X, _ = prepare_X(train_df, features=ALL_FEATURES)
+  File "/Users/neo/Desktop/jongga_picker/train_rf_loss_model.py", line 86, in prepare_X
+    if X[f].dtype.kind in "fi":
+  File "/Users/neo/Desktop/jongga_picker/venv/lib/python3.9/site-packages/pandas/core/generic.py", line 6321, in __getattr__
+    return object.__getattribute__(self, name)
+AttributeError: 'DataFrame' object has no attribute 'dtype'
