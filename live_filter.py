@@ -220,6 +220,85 @@ def apply_avoid_full(df, sd=None, cur=None, mode="v2"):
     return out
 
 
+def build_picks_for_period(feats, sd, cur, since_date, until_date, label,
+                            use_rf=True, rf_threshold="th20", top_n=20):
+    """기간 누적 시그널 추천 (since~until)."""
+    sub = feats[(feats["Date"] >= since_date) & (feats["Date"] <= until_date)].copy()
+    if len(sub) == 0:
+        return pd.DataFrame(), 0
+    filtered = apply_avoid_full(sub, sd, cur)
+    n_after_avoid = len(filtered)
+    if use_rf and n_after_avoid > 0:
+        filtered = apply_rf_filter(filtered, sd, cur, threshold_key=rf_threshold)
+        filtered = filtered[filtered["_RF위험"] == 0].copy()
+    # 중복 제거 + 거래대금 낮은 순
+    if len(filtered) > 0:
+        filtered = filtered.sort_values("Score", ascending=False).drop_duplicates(["Date", "Code"])
+        filtered = filtered.sort_values("Amount").head(top_n)
+    return filtered, n_after_avoid
+
+
+def build_all_picks(top_today=10, top_week=3, top_month=12,
+                     use_rf=True, rf_threshold="th20"):
+    """오늘 / 이번주 / 이번달 추천 한꺼번에 빌드."""
+    feats, sd, cur = load_data()
+    last_date = feats["Date"].max()
+    week_start = last_date - pd.Timedelta(days=last_date.weekday())  # 월요일
+    month_start = last_date.replace(day=1)
+    print(f"[기준일] {last_date.date()} (주시작 {week_start.date()}, 월시작 {month_start.date()})")
+
+    # 오늘
+    today_picks, today_after_avoid = build_picks_for_period(
+        feats, sd, cur, last_date, last_date, "오늘",
+        use_rf=use_rf, rf_threshold=rf_threshold, top_n=top_today)
+    # 이번 주 (월~금)
+    week_picks, _ = build_picks_for_period(
+        feats, sd, cur, week_start, last_date, "이번주",
+        use_rf=use_rf, rf_threshold=rf_threshold, top_n=top_week)
+    # 이번 달
+    month_picks, _ = build_picks_for_period(
+        feats, sd, cur, month_start, last_date, "이번달",
+        use_rf=use_rf, rf_threshold=rf_threshold, top_n=top_month)
+
+    print(f"\n[오늘 추천 {len(today_picks)}건] (시그널 발생: {today_after_avoid}건 → RF회피 후)")
+    if len(today_picks):
+        print(today_picks[["Code", "Name", "Market", "Close", "Amount", "Score"]].to_string(index=False))
+
+    print(f"\n[이번 주 TOP {len(week_picks)}건 — 주3건 룰]")
+    if len(week_picks):
+        print(week_picks[["Date", "Code", "Name", "Market", "Close", "Score"]].to_string(index=False))
+
+    print(f"\n[이번 달 TOP {len(month_picks)}건 — 월 12건 룰]")
+    if len(month_picks):
+        print(month_picks[["Date", "Code", "Name", "Market", "Close", "Score"]].to_string(index=False))
+
+    # 저장
+    for picks, fname in [
+        (today_picks, "today_picks.csv"),
+        (week_picks, "week_picks.csv"),
+        (month_picks, "month_picks.csv"),
+    ]:
+        if len(picks):
+            picks = picks.copy()
+            picks["기준일"] = picks["Date"].dt.strftime("%Y-%m-%d")
+        picks.to_csv(CACHE / fname, index=False)
+
+    # JSON
+    summary = {
+        "updated_at": datetime.now().isoformat(),
+        "base_date": last_date.strftime("%Y-%m-%d"),
+        "week_start": week_start.strftime("%Y-%m-%d"),
+        "month_start": month_start.strftime("%Y-%m-%d"),
+        "today": {"n": len(today_picks), "picks": today_picks.to_dict(orient="records")},
+        "week": {"n": len(week_picks), "picks": week_picks.to_dict(orient="records")},
+        "month": {"n": len(month_picks), "picks": month_picks.to_dict(orient="records")},
+    }
+    with open(CACHE / "today_picks.json", "w", encoding="utf-8") as f:
+        json.dump(summary, f, ensure_ascii=False, indent=2, default=str)
+    print(f"\n[저장] today/week/month picks csv + today_picks.json")
+    return today_picks, week_picks, month_picks
+
+
 def build_today_picks(top_n=20, use_rf=True, rf_threshold="th20"):
     """오늘 발생한 시그널 중 최종 추천.
 
