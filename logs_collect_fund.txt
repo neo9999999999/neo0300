@@ -1,0 +1,50 @@
+/Users/neo/Desktop/jongga_picker/venv/lib/python3.9/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+[펀더수집] 940종목
+
+[1/3] 현재 시점 PER/PBR/시총...
+  [50/940] elapsed=0s
+  [100/940] elapsed=1s
+  [150/940] elapsed=1s
+  [200/940] elapsed=1s
+  [250/940] elapsed=2s
+  [300/940] elapsed=2s
+  [350/940] elapsed=2s
+  [400/940] elapsed=3s
+  [450/940] elapsed=3s
+  [500/940] elapsed=3s
+  [550/940] elapsed=4s
+  [600/940] elapsed=4s
+  [650/940] elapsed=4s
+  [700/940] elapsed=5s
+  [750/940] elapsed=5s
+  [800/940] elapsed=5s
+  [850/940] elapsed=6s
+  [900/940] elapsed=6s
+  ✓ current: 940종목, 6s
+
+[2/3] 연간 재무...
+  [100/940] elapsed=1s
+  [200/940] elapsed=1s
+  [300/940] elapsed=2s
+  [400/940] elapsed=2s
+  [500/940] elapsed=3s
+  [600/940] elapsed=3s
+  [700/940] elapsed=4s
+  [800/940] elapsed=4s
+  [900/940] elapsed=5s
+  ✓ annual: 48,128건, 5s
+
+[3/3] 분기 재무...
+  [100/940] elapsed=1s
+  [200/940] elapsed=1s
+  [300/940] elapsed=2s
+  [400/940] elapsed=2s
+  [500/940] elapsed=3s
+  [600/940] elapsed=3s
+  [700/940] elapsed=4s
+  [800/940] elapsed=4s
+  [900/940] elapsed=5s
+  ✓ quarter: 72,412건, 5s
+
+[완료]

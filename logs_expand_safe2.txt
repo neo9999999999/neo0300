@@ -1,0 +1,36 @@
+[목표] 시총 2000 (cutoff 549억)
+[기존] 500종목
+[다운로드 대상] 1500
+  [50/1500] new=48, timeout=0, fail=2, 11.2/s, ETA 2.2분
+  [100/1500] new=98, timeout=0, fail=2, 10.7/s, ETA 2.2분
+  [150/1500] new=148, timeout=0, fail=2, 10.7/s, ETA 2.1분
+  [200/1500] new=197, timeout=0, fail=3, 10.7/s, ETA 2.0분
+  [250/1500] new=246, timeout=0, fail=4, 10.6/s, ETA 2.0분
+  [300/1500] new=295, timeout=0, fail=5, 10.6/s, ETA 1.9분
+  [350/1500] new=345, timeout=0, fail=5, 10.7/s, ETA 1.8분
+  [400/1500] new=394, timeout=0, fail=6, 10.6/s, ETA 1.7분
+  [450/1500] new=444, timeout=0, fail=6, 10.6/s, ETA 1.6분
+  [500/1500] new=494, timeout=0, fail=6, 10.6/s, ETA 1.6분
+  [550/1500] new=544, timeout=0, fail=6, 10.6/s, ETA 1.5분
+  [600/1500] new=592, timeout=0, fail=8, 10.6/s, ETA 1.4분
+  [650/1500] new=641, timeout=0, fail=9, 10.6/s, ETA 1.3분
+  [700/1500] new=690, timeout=0, fail=10, 10.6/s, ETA 1.3분
+  [750/1500] new=740, timeout=0, fail=10, 10.5/s, ETA 1.2분
+  [800/1500] new=790, timeout=0, fail=10, 10.5/s, ETA 1.1분
+  [850/1500] new=839, timeout=0, fail=11, 10.5/s, ETA 1.0분
+  [900/1500] new=888, timeout=0, fail=12, 10.5/s, ETA 1.0분
+  [950/1500] new=937, timeout=0, fail=13, 10.5/s, ETA 0.9분
+  [1000/1500] new=987, timeout=0, fail=13, 10.5/s, ETA 0.8분
+  [1050/1500] new=1037, timeout=0, fail=13, 10.5/s, ETA 0.7분
+  [1100/1500] new=1087, timeout=0, fail=13, 10.5/s, ETA 0.6분
+  [1150/1500] new=1137, timeout=0, fail=13, 10.5/s, ETA 0.6분
+  [1200/1500] new=1187, timeout=0, fail=13, 10.5/s, ETA 0.5분
+  [1250/1500] new=1237, timeout=0, fail=13, 10.4/s, ETA 0.4분
+  [1300/1500] new=1287, timeout=0, fail=13, 10.4/s, ETA 0.3분
+  [1350/1500] new=1337, timeout=0, fail=13, 10.4/s, ETA 0.2분
+  [1400/1500] new=1387, timeout=0, fail=13, 10.4/s, ETA 0.2분
+  [1450/1500] new=1437, timeout=0, fail=13, 10.4/s, ETA 0.1분
+  [1500/1500] new=1486, timeout=0, fail=14, 10.4/s, ETA 0.0분
+
+[완료] new=1486, timeout=0, fail=14, 총 1986
+  소요: 2.4분

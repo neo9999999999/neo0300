@@ -1,0 +1,11 @@
+[목표] 시총 2000 (cutoff 549억)
+[기존] 500종목
+[다운로드 대상] 1500
+Traceback (most recent call last):
+  File "/Users/neo/Desktop/jongga_picker/expand_ohlcv_safe.py", line 96, in <module>
+    main()
+  File "/Users/neo/Desktop/jongga_picker/expand_ohlcv_safe.py", line 71, in main
+    if result == "TIMEOUT":
+  File "/Users/neo/Desktop/jongga_picker/venv/lib/python3.9/site-packages/pandas/core/generic.py", line 1580, in __nonzero__
+    raise ValueError(
+ValueError: The truth value of a DataFrame is ambiguous. Use a.empty, a.bool(), a.item(), a.any() or a.all().

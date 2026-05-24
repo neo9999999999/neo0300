@@ -37,6 +37,45 @@ def load_rf_model():
     return model, meta
 
 
+def load_strong_buy():
+    """필수 매수 종합 모델 (loss/sw/100+/50+/peak_reg)."""
+    p = CACHE / "strong_buy_models.pkl"
+    if not p.exists():
+        return None
+    with open(p, "rb") as f:
+        return pickle.load(f)
+
+
+def apply_strong_buy_score(df, sd=None, cur=None):
+    """필수 매수 종합 점수 + 예상 peak 추가."""
+    sb = load_strong_buy()
+    if sb is None:
+        df["StrongScore"] = np.nan
+        df["예상peak%"] = np.nan
+        df["슈퍼위너확률%"] = np.nan
+        df["100%+확률"] = np.nan
+        df["50%+확률"] = np.nan
+        df["손절확률%"] = np.nan
+        return df
+    # 모델 입력 준비 (RF용 시계열특성 + 수급 + 펀더 이미 apply_rf_filter에서 추가했음 가정)
+    features = sb["features"]
+    X = df.reindex(columns=features).copy().replace([np.inf, -np.inf], np.nan)
+    X = X.fillna(X.median(numeric_only=True))
+    models = sb["models"]
+    df["손절확률%"] = (models["loss"].predict_proba(X)[:, 1] * 100).round(1)
+    df["슈퍼위너확률%"] = (models["sw"].predict_proba(X)[:, 1] * 100).round(1)
+    df["100%+확률"] = (models["100plus"].predict_proba(X)[:, 1] * 100).round(1)
+    df["50%+확률"] = (models["50plus"].predict_proba(X)[:, 1] * 100).round(1)
+    df["예상peak%"] = models["peak_reg"].predict(X).round(1)
+    df["StrongScore"] = (
+        df["슈퍼위너확률%"] * 3.0
+        + df["100%+확률"] * 1.5
+        + df["50%+확률"] * 1.0
+        - df["손절확률%"] * 2.0
+    ).round(1)
+    return df
+
+
 def add_pre_features_one(df, ohlcv_dict):
     """라이브 시그널에 시계열 특성 추가."""
     rows = {k: [] for k in [
@@ -326,6 +365,10 @@ def build_today_picks(top_n=20, use_rf=True, rf_threshold="th20"):
               f"(위험 {(filtered['_RF위험']==1).sum()}건 제외)")
         filtered = filtered_safe
 
+    # 2.5) 필수 매수 종합 점수 + 예상수익률
+    if len(filtered) > 0:
+        filtered = apply_strong_buy_score(filtered, sd, cur)
+
     if len(filtered) == 0:
         print("[알림] 오늘은 추천 종목 없음")
         # 빈 결과 저장
@@ -340,7 +383,22 @@ def build_today_picks(top_n=20, use_rf=True, rf_threshold="th20"):
     filtered = filtered.sort_values("Score", ascending=False).drop_duplicates("Code")
     filtered = filtered.sort_values("Amount").head(top_n)
 
-    out_cols = ["Date", "Code", "Name", "Market", "Close", "Amount", "Score",
+    # 4) 등급 + 가능성 태그 + 예상수익률
+    if "StrongScore" in filtered.columns and len(filtered) > 0:
+        from recommendation_grader import assign_grades, add_predicted_returns
+        # p_loss/p_sw/p_100plus/p_50plus/peak_pred 표준 컬럼
+        filtered["p_loss"] = filtered.get("손절확률%", 0) / 100.0
+        filtered["p_sw"] = filtered.get("슈퍼위너확률%", 0) / 100.0
+        filtered["p_100plus"] = filtered.get("100%+확률", 0) / 100.0
+        filtered["p_50plus"] = filtered.get("50%+확률", 0) / 100.0
+        filtered["peak_pred"] = filtered.get("예상peak%", 0)
+        filtered = assign_grades(filtered, scope="day")
+        filtered = add_predicted_returns(filtered)
+        filtered = filtered.sort_values("StrongScore", ascending=False)
+
+    out_cols = ["Date", "등급", "가능성태그", "예상수익률", "Code", "Name", "Market",
+                "Close", "Amount", "Score", "StrongScore", "예상peak%",
+                "슈퍼위너확률%", "100%+확률", "50%+확률", "손절확률%",
                 "chart_pattern", "past_60", "past_120", "pos_252_high",
                 "slope60", "drawdown60"]
     extra = [c for c in ["_for_20d", "_inst_20d", "_PER", "_PBR",
