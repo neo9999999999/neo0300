@@ -1,0 +1,53 @@
+{
+  "OOS_daily_1": [
+    "F05_slope05_For양__S08_외인매수강",
+    "F10_KOSDAQ만__S09_52주고점근접",
+    "F01_회피6_기본__S06_변동성높",
+    "F02_slope_05__S06_변동성높",
+    "F10_KOSDAQ만__S03_점수낮",
+    "F03_slope_10__S01_거래대금낮"
+  ],
+  "OOS_weekly_2": [
+    "F07_눌림목30_10__S06_변동성높",
+    "F10_KOSDAQ만__S07_slope강한",
+    "F10_KOSDAQ만__S06_변동성높",
+    "F01_회피6_기본__S01_거래대금낮",
+    "F03_slope_10__S01_거래대금낮",
+    "F10_KOSDAQ만__S01_거래대금낮",
+    "F10_KOSDAQ만__S08_외인매수강"
+  ],
+  "OOS_weekly_3": [
+    "F07_눌림목30_10__S06_변동성높",
+    "F01_회피6_기본__S06_변동성높",
+    "F09_slope05_과열X__S01_거래대금낮",
+    "F10_KOSDAQ만__S07_slope강한",
+    "F01_회피6_기본__S01_거래대금낮",
+    "F03_slope_10__S01_거래대금낮",
+    "F10_KOSDAQ만__S08_외인매수강"
+  ],
+  "FULL_daily_1": [
+    "F10_KOSDAQ만__S05_변동성낮",
+    "F10_KOSDAQ만__S09_52주고점근접",
+    "F10_KOSDAQ만__S04_점수높",
+    "F10_KOSDAQ만__S07_slope강한",
+    "F10_KOSDAQ만__S01_거래대금낮",
+    "F10_KOSDAQ만__S10_랜덤"
+  ],
+  "FULL_weekly_2": [
+    "F01_회피6_기본__S07_slope강한",
+    "F10_KOSDAQ만__S09_52주고점근접",
+    "F02_slope_05__S07_slope강한",
+    "F10_KOSDAQ만__S07_slope강한",
+    "F10_KOSDAQ만__S06_변동성높",
+    "F10_KOSDAQ만__S03_점수낮"
+  ],
+  "FULL_weekly_3": [
+    "F01_회피6_기본__S07_slope강한",
+    "F01_회피6_기본__S06_변동성높",
+    "F10_KOSDAQ만__S07_slope강한",
+    "F10_KOSDAQ만__S06_변동성높",
+    "F10_KOSDAQ만__S03_점수낮",
+    "F10_KOSDAQ만__S01_거래대금낮",
+    "F10_KOSDAQ만__S08_외인매수강"
+  ]
+}
