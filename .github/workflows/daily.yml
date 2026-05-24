@@ -50,7 +50,15 @@ jobs:
           python3 precompute_enriched.py || echo "precompute 실패 (skip)"
           ls -la cache/enriched_*.parquet 2>&1 | head -10
 
-      - name: Build today picks (회피 6+v2 + 오늘의 추천)
+      - name: Train RF loss-avoidance model (weekly)
+        run: |
+          # 주 1회 (월요일) RF 재학습 / 평일은 기존 모델 사용
+          if [ "$(date -u +%u)" = "1" ] || [ ! -f cache/rf_loss_model.pkl ]; then
+            python3 train_rf_loss_model.py || echo "RF train 실패 (skip)"
+          fi
+          ls -la cache/rf_loss_model.pkl cache/rf_features.json 2>/dev/null || true
+
+      - name: Build today picks (회피 8 + RF 손절회피 + 오늘의 추천)
         run: |
           python3 live_filter.py || echo "live_filter 실패 (skip)"
           ls -la cache/today_picks* 2>/dev/null
@@ -62,7 +70,9 @@ jobs:
           git add cache/market_snapshot.parquet cache/market_snapshot_meta.json \
                   cache/ohlcv_*.pkl cache/enriched_*.parquet \
                   cache/fundamentals_*.parquet cache/supply_demand.parquet \
-                  cache/today_picks.csv cache/today_picks.json || true
+                  cache/today_picks.csv cache/today_picks.json \
+                  cache/rf_loss_model.pkl cache/rf_features.json \
+                  cache/rf_feature_importance.csv || true
           if git diff --staged --quiet; then
             echo "변경사항 없음"
           else
