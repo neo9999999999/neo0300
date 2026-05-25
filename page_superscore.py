@@ -731,7 +731,7 @@ def page_backtest():
 
     # === 180일 완료 여부 판정 ===
     today = pd.Timestamp.now().normalize()
-    HOLD_CAL_DAYS = 260   # 180거래일 ≈ 260달력일 (안전치, 휴장 포함)
+    HOLD_CAL_DAYS = 260   # 180거래일 ≈ 260달력일
     picks["경과일"] = (today - picks["Date"]).dt.days
     picks["진행상태"] = np.where(
         picks["경과일"] >= HOLD_CAL_DAYS, "완료", "진행중"
@@ -745,14 +745,12 @@ def page_backtest():
     info_cols[1].metric("진행중", f"{n_ongoing:,}건")
     info_cols[2].metric("매수일 기준 평균 경과", f"{picks['경과일'].mean():.0f}일")
     st.caption(
-        "**진행중**: 매수일+260일이 아직 안 지나 결과 미확정. "
-        "표의 '180일수익률' / '최고가도달'은 진행중일 경우 **현재까지의 진행값**이며 "
-        "180일 후 종가/최고가가 더 오르거나 떨어질 수 있음."
+        "**진행중**: 매수일+260일이 아직 안 지난 케이스 — 표의 수익률/최고가는 **현재까지의 진행값** "
+        "(180일 후 더 오르거나 떨어질 수 있음). 결과 분류는 현재까지 도달한 최고가 기준."
     )
 
+    # 결과 분류 = peak/ret 기준 (진행중이든 완료든 동일하게)
     def cls(row):
-        if row["진행상태"] == "진행중":
-            return "진행중"
         p = row.get("peak_180d", 0)
         if pd.isna(p): return "미정"
         if p >= 200: return "슈퍼위너"
@@ -763,13 +761,20 @@ def page_backtest():
         return "보합"
     picks["결과"] = picks.apply(cls, axis=1)
 
+    # 10만원 매수 시 수익금 (만원 단위)
+    picks["수익금_만원"] = (picks["ret_180d"].fillna(0) * 10000 / 100 / 10000).round(1)  # = ret/10
+
     years_avail = sorted(picks["년도"].dropna().unique().astype(int).tolist())
     sel_years = _button_multiselect("년도 (다중 선택)", years_avail, default=years_avail, key_prefix="bt_year")
     months_avail = list(range(1, 13))
     sel_months = _button_multiselect("월 (다중 선택)", months_avail, default=months_avail, key_prefix="bt_month")
-    results_avail = ["슈퍼위너","100%+","50%+","10%+","보합","손절","진행중","미정"]
+    results_avail = ["슈퍼위너","100%+","50%+","10%+","보합","손절","미정"]
     sel_results = _button_multiselect("결과 (다중 선택)", results_avail,
-                                       default=["슈퍼위너","100%+","50%+"], key_prefix="bt_result")
+                                       default=results_avail, key_prefix="bt_result")
+    # 진행상태 필터 (별도)
+    status_avail = ["완료", "진행중"]
+    sel_status = _button_multiselect("진행상태 (다중 선택)", status_avail,
+                                      default=status_avail, key_prefix="bt_status")
 
     sort_options = {
         "최신 일자순": ("Date", False), "오래된 일자순": ("Date", True),
@@ -794,16 +799,14 @@ def page_backtest():
     filtered = picks[
         picks["년도"].isin(sel_years) &
         picks["월"].isin(sel_months) &
-        picks["결과"].isin(sel_results)
+        picks["결과"].isin(sel_results) &
+        picks["진행상태"].isin(sel_status)
     ].copy()
     filtered = filtered.sort_values(sort_col_key, ascending=sort_asc)
 
-    # 진행중 case: 컬럼명을 "현재까지"로 보여주기 위해 상태 컬럼 추가
-    filtered["현재가/매도가"] = filtered["sell_close"]
-    filtered["수익률(%)"] = filtered["ret_180d"]
-    filtered["최고가도달(%)"] = filtered["peak_180d"]
+    # 진행상태 한 문장으로
     filtered["진행"] = filtered.apply(
-        lambda r: f"진행중 (D-{int(r['D-남은일'])})" if r["진행상태"]=="진행중" else "완료(180일)",
+        lambda r: f"진행중 D-{int(r['D-남은일'])}" if r["진행상태"]=="진행중" else "완료",
         axis=1,
     )
 
@@ -812,9 +815,9 @@ def page_backtest():
         "Code":"종목코드","Name":"종목명","Market":"시장",
         "Close":"매수가","진행":"진행상태",
         "결과":"결과",
-        "수익률(%)":"수익률(%)",
-        "최고가도달(%)":"최고가(%)",
-        "현재가/매도가":"매도가/현재가",
+        "ret_180d":"수익률(%)","peak_180d":"최고가(%)",
+        "sell_close":"매도가/현재가",
+        "수익금_만원":"수익금(만원,10만원당)",
         "SuperScore_v2":"슈퍼점수",
         "p_sw":"슈퍼위너확률","p_100plus":"100%+확률",
         "p_50plus":"50%+확률","p_loss":"손절확률",
@@ -829,9 +832,50 @@ def page_backtest():
         if c in display.columns:
             display[c] = (display[c]*100).round(1).astype(str) + "%"
     st.dataframe(display, hide_index=True, use_container_width=True, height=600)
+
+    # 요약 카드 (선택된 행 기준)
+    if len(filtered) > 0:
+        avg_ret = filtered["ret_180d"].mean()
+        avg_peak = filtered["peak_180d"].mean()
+        sw_n = int((filtered["peak_180d"]>=200).sum())
+        p100_n = int((filtered["peak_180d"]>=100).sum())
+        win_n = int((filtered["ret_180d"]>0).sum())
+        loss_n = int((filtered["ret_180d"]<=-20).sum())
+        total_profit = filtered["수익금_만원"].sum()
+        n = len(filtered)
+        st.markdown(f"""
+<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-top:12px;">
+  <div style="background:#FAFAFA;border-radius:6px;padding:8px 12px;text-align:center;">
+    <div style="font-size:10px;color:#6B7280;">선택 건수</div>
+    <div style="font-size:18px;font-weight:800;color:#111;">{n:,}건</div>
+  </div>
+  <div style="background:#FAFAFA;border-radius:6px;padding:8px 12px;text-align:center;">
+    <div style="font-size:10px;color:#6B7280;">평균 수익률</div>
+    <div style="font-size:18px;font-weight:800;color:{'#10B981' if avg_ret>0 else '#DC2626'};">{avg_ret:+.1f}%</div>
+  </div>
+  <div style="background:#FAFAFA;border-radius:6px;padding:8px 12px;text-align:center;">
+    <div style="font-size:10px;color:#6B7280;">평균 최고가</div>
+    <div style="font-size:18px;font-weight:800;color:#B91C1C;">+{avg_peak:.0f}%</div>
+  </div>
+  <div style="background:#FAFAFA;border-radius:6px;padding:8px 12px;text-align:center;">
+    <div style="font-size:10px;color:#6B7280;">슈퍼위너 도달</div>
+    <div style="font-size:18px;font-weight:800;color:#B91C1C;">{sw_n}건</div>
+  </div>
+  <div style="background:#FAFAFA;border-radius:6px;padding:8px 12px;text-align:center;">
+    <div style="font-size:10px;color:#6B7280;">100%+ 도달</div>
+    <div style="font-size:18px;font-weight:800;color:#DC2626;">{p100_n}건</div>
+  </div>
+  <div style="background:#FAFAFA;border-radius:6px;padding:8px 12px;text-align:center;">
+    <div style="font-size:10px;color:#6B7280;">총 수익금 (10만원/종목)</div>
+    <div style="font-size:18px;font-weight:800;color:{'#10B981' if total_profit>0 else '#DC2626'};">{total_profit:+,.0f}만</div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
     st.caption(
         f"검색 결과 {len(filtered):,}건 중 최대 500건 표시. "
-        f"**'진행중'** 표시된 행의 수익률/최고가는 **현재까지의 진행값** (180일 미완료)."
+        f"**진행중 D-XX** = 매수일+260일까지 남은 일수. 수익률/최고가/매도가는 진행중이면 **현재까지 진행값**, "
+        f"수익금은 **10만원 매수 시** 만원 단위 손익."
     )
 
 
