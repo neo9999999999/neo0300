@@ -1043,17 +1043,57 @@ def page_backtest():
     picks["수익금_만원"] = (picks["ret_180d"].fillna(0) * buy_amount_man / 100).round(1)
 
     # === 등급 자동 부여 ===
-    # MASTER_best_picks는 이미 weekly_5 top 픽들. 그 안에서 SuperScore 분위로
-    # 슈퍼강력매수(상위 30%) vs 추천매수(나머지)로 나눔.
     score_col = "SuperScore_v2" if "SuperScore_v2" in picks.columns else "SuperScore"
     if score_col in picks.columns:
-        # 일자별 percentile rank (같은 날 매수 종목들끼리 비교) — 일일 분포 안 좋으면 전체 분위 fallback
         picks["_score_pct_global"] = picks[score_col].rank(pct=True)
         picks["등급"] = np.where(
             picks["_score_pct_global"] >= 0.70, "슈퍼강력매수", "추천매수"
         )
     else:
         picks["등급"] = "추천매수"
+
+    # === 중복 매수 처리 (cooldown) ===
+    # 같은 종목이 N일 안에 재신호 → 추가 매수 안 함 (현실적 운용)
+    DEDUP_KEY = "bt_dedup_days"
+    if DEDUP_KEY not in st.session_state:
+        st.session_state[DEDUP_KEY] = 0  # 디폴트: dedup 없음 (전체)
+
+    st.markdown("**중복 매수 처리** (같은 종목 cooldown)")
+    dcols = st.columns(7)
+    dedup_presets = [("전체 매수", 0), ("1일", 1), ("5일", 5), ("7일", 7),
+                     ("14일", 14), ("30일", 30), ("90일", 90)]
+    def _set_dedup(d):
+        st.session_state[DEDUP_KEY] = d
+    for i, (label, d) in enumerate(dedup_presets):
+        is_sel = st.session_state[DEDUP_KEY] == d
+        dcols[i].button(label, key=f"bt_dedup_{d}",
+                         type=("primary" if is_sel else "secondary"),
+                         use_container_width=True,
+                         on_click=_set_dedup, args=(d,))
+    dedup_days = int(st.session_state[DEDUP_KEY])
+    if dedup_days > 0:
+        st.caption(
+            f"**Cooldown {dedup_days}일** — 같은 종목 매수 후 {dedup_days}일 안에는 재신호 무시. "
+            f"(현실적 운용: 보유 중 종목 추가 매수 안 함)"
+        )
+    else:
+        st.caption(
+            "**전체 매수** — 매일 시그널마다 매수. (한 종목이 5일 연속 뜨면 5번 매수, 자본 5배 필요)"
+        )
+
+    # cooldown 적용
+    if dedup_days > 0:
+        picks_sorted = picks.sort_values(["Code","Date"]).copy()
+        last_buy = {}
+        keep_mask = []
+        for _, r in picks_sorted.iterrows():
+            code = r["Code"]; d = r["Date"]
+            if code not in last_buy or (d - last_buy[code]).days > dedup_days:
+                keep_mask.append(True); last_buy[code] = d
+            else:
+                keep_mask.append(False)
+        picks_sorted["_keep"] = keep_mask
+        picks = picks_sorted[picks_sorted["_keep"]].copy()
 
     years_avail = sorted(picks["년도"].dropna().unique().astype(int).tolist())
     sel_years = _button_multiselect("년도 (다중 선택)", years_avail, default=years_avail, key_prefix="bt_year")
