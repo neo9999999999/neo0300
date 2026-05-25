@@ -1006,32 +1006,36 @@ def page_backtest():
         return "보합"                    # 0%~-20% 미세 손실
     picks["결과"] = picks.apply(cls, axis=1)
 
-    # === 종목당 매수 금액 입력 (만원 단위) ===
-    if "bt_buy_amount" not in st.session_state:
-        st.session_state.bt_buy_amount = 10  # 디폴트 10만원
+    # === 종목당 매수 금액 입력 (만원) — 단일 session_state 키로 통합 ===
+    # 이전 버그: 두 위젯이 별도 키를 들고 있어 다른 위젯 변경 시 number_input 의
+    # 옛 값이 살아남아 매수금이 10만으로 리셋되는 현상.
+    # 해결: 프리셋 버튼과 number_input 모두 같은 key="bt_buy_amount" 공유.
+    AMT_KEY = "bt_buy_amount"
+    if AMT_KEY not in st.session_state:
+        st.session_state[AMT_KEY] = 10  # 디폴트 10만
 
-    st.markdown("**종목당 매수 금액** (만원 단위)")
+    st.markdown("**종목당 매수 금액** (만원)")
     bcols = st.columns([1,1,1,1,1,2])
-    presets = [
-        ("10만", 10), ("50만", 50), ("100만", 100), ("300만", 300), ("500만", 500),
-    ]
+    presets = [("10만",10), ("50만",50), ("100만",100), ("300만",300), ("500만",500)]
+
+    def _set_amt(amt):
+        st.session_state[AMT_KEY] = amt
+
     for i, (label, amt) in enumerate(presets):
-        is_sel = st.session_state.bt_buy_amount == amt
-        if bcols[i].button(label, key=f"bt_amt_{amt}",
-                           type=("primary" if is_sel else "secondary"),
-                           use_container_width=True):
-            st.session_state.bt_buy_amount = amt
-            st.rerun()
-    custom_amt = bcols[5].number_input(
-        "직접 입력 (만원)", min_value=1, max_value=100000,
-        value=st.session_state.bt_buy_amount, step=10,
-        label_visibility="collapsed", key="bt_amt_custom_input",
+        is_sel = st.session_state[AMT_KEY] == amt
+        bcols[i].button(
+            label, key=f"bt_amt_btn_{amt}",
+            type=("primary" if is_sel else "secondary"),
+            use_container_width=True,
+            on_click=_set_amt, args=(amt,),
+        )
+    # number_input — 동일 key 사용 → 단일 소스. value 인자 없이.
+    bcols[5].number_input(
+        "직접 입력 (만원)", min_value=1, max_value=100000, step=10,
+        key=AMT_KEY, label_visibility="collapsed",
     )
-    if custom_amt != st.session_state.bt_buy_amount:
-        st.session_state.bt_buy_amount = int(custom_amt)
-        st.rerun()
-    buy_amount_man = st.session_state.bt_buy_amount  # 만원
-    st.caption(f"현재 설정: 종목당 **{buy_amount_man:,}만원** 매수 가정 (모든 수익금/투자금 자동 재계산)")
+    buy_amount_man = int(st.session_state[AMT_KEY])
+    st.caption(f"현재 설정: 종목당 **{buy_amount_man:,}만원** 매수 가정 (모든 수익금·투자금 자동 재계산)")
 
     # 수익금(만원 단위) = ret% × 매수금만원 / 100
     picks["수익금_만원"] = (picks["ret_180d"].fillna(0) * buy_amount_man / 100).round(1)
