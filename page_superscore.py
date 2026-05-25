@@ -390,9 +390,20 @@ def _prob_bar(label: str, prob_pct: float, color: str, is_main: bool = False):
 # ============== 유사 종목 카드 (이모지 없음) ==============
 
 def _render_similar_cards(similar_df: pd.DataFrame, show_stock_name: bool = False):
-    """들여쓰기 없는 한 줄 HTML (Streamlit markdown의 코드블록 오인식 방지)"""
-    html = '<div style="margin:6px 0;">'
-    for _, r in similar_df.iterrows():
+    """단순 텍스트 행 — 일자 / 종목 / 고점% / 180일% (색상 텍스트만)"""
+    # 헤더
+    html = (
+        '<div style="border:1px solid #F3F4F6;border-radius:6px;background:white;overflow:hidden;">'
+        '<div style="display:grid;grid-template-columns:90px 1fr 80px 80px;gap:8px;'
+        'padding:6px 12px;background:#FAFAFA;border-bottom:1px solid #F3F4F6;'
+        'font-size:10px;color:#9CA3AF;font-weight:600;letter-spacing:1px;">'
+        '<div>일자</div>'
+        f'<div>{"종목" if show_stock_name else "거래"}</div>'
+        '<div style="text-align:right;">고점</div>'
+        '<div style="text-align:right;">180일</div>'
+        '</div>'
+    )
+    for i, (_, r) in enumerate(similar_df.iterrows()):
         try: d = pd.to_datetime(r.get("Date")).strftime("%Y-%m-%d")
         except: d = ""
         nm = r.get("Name", ""); cd = r.get("Code", "")
@@ -401,72 +412,48 @@ def _render_similar_cards(similar_df: pd.DataFrame, show_stock_name: bool = Fals
         close_buy = r.get("Close", 0) or 0
         close_sell = r.get("sell_close", 0) or 0
         peak_col = _peak_color(peak); ret_col = _ret_color(ret_)
-        peak_lbl = _peak_label_plain(peak)
         peak_txt = f"{peak:+.1f}%" if pd.notna(peak) else "—"
         ret_txt  = f"{ret_:+.1f}%" if pd.notna(ret_) else "—"
-        ret_lbl = "손절" if pd.notna(ret_) and ret_ <= -20 else ("익절" if pd.notna(ret_) and ret_ > 0 else "보합")
-        name_block = (
-            f'<div style="font-weight:700;font-size:13px;color:#111;">{nm} '
-            f'<span style="color:#9CA3AF;font-weight:400;font-size:11px;">{cd}</span></div>'
-            if show_stock_name else ""
-        )
-        # 한 줄로 압축 — markdown 코드블록 오인식 방지
-        row_html = (
-            f'<div style="display:grid;grid-template-columns:90px 1fr 130px 130px;gap:10px;align-items:center;'
-            f'padding:10px 12px;background:white;border:1px solid #F3F4F6;'
-            f'border-left:3px solid {peak_col};border-radius:6px;margin-bottom:6px;">'
-            f'<div style="font-size:11px;color:#6B7280;">{d}</div>'
-            f'<div>{name_block}'
-            f'<div style="font-size:11px;color:#9CA3AF;margin-top:2px;">'
-            f'매수 {close_buy:,.0f} → 매도 {close_sell:,.0f}</div></div>'
-            f'<div style="text-align:center;background:{peak_col};padding:8px 6px;border-radius:6px;color:white;">'
-            f'<div style="font-size:9px;opacity:0.85;letter-spacing:1px;">고점 도달</div>'
-            f'<div style="font-size:18px;font-weight:900;line-height:1.1;">{peak_txt}</div>'
-            f'<div style="font-size:10px;font-weight:700;opacity:0.95;">{peak_lbl}</div></div>'
-            f'<div style="text-align:center;background:{ret_col};padding:8px 6px;border-radius:6px;color:white;">'
-            f'<div style="font-size:9px;opacity:0.85;letter-spacing:1px;">180일 종가</div>'
-            f'<div style="font-size:18px;font-weight:900;line-height:1.1;">{ret_txt}</div>'
-            f'<div style="font-size:10px;font-weight:700;opacity:0.95;">{ret_lbl}</div></div>'
+        # 좌측 중앙: 종목명(또는 매수→매도)
+        if show_stock_name:
+            mid = f'<b style="color:#111;">{nm}</b> <span style="color:#9CA3AF;font-size:10px;">{cd}</span>'
+        else:
+            mid = f'<span style="color:#6B7280;">매수 {close_buy:,.0f} → 매도 {close_sell:,.0f}</span>'
+        bg = "#FAFAFA" if i % 2 else "white"
+        html += (
+            f'<div style="display:grid;grid-template-columns:90px 1fr 80px 80px;gap:8px;'
+            f'padding:8px 12px;background:{bg};font-size:12px;align-items:center;">'
+            f'<div style="color:#6B7280;">{d}</div>'
+            f'<div>{mid}</div>'
+            f'<div style="text-align:right;color:{peak_col};font-weight:700;">{peak_txt}</div>'
+            f'<div style="text-align:right;color:{ret_col};font-weight:700;">{ret_txt}</div>'
             f'</div>'
         )
-        html += row_html
     html += "</div>"
     st.markdown(html, unsafe_allow_html=True)
 
 
 def _render_similar_summary(similar_df: pd.DataFrame, label: str = "평균"):
+    """한 줄 요약 — 평균 고점/180일 + 카운트"""
     n = len(similar_df)
     avg_peak = similar_df["peak_180d"].mean()
-    med_peak = similar_df["peak_180d"].median()
     avg_ret  = similar_df["ret_180d"].mean()
-    med_ret  = similar_df["ret_180d"].median()
     sw_n   = int((similar_df["peak_180d"]>=200).sum())
     p100_n = int((similar_df["peak_180d"]>=100).sum())
     p50_n  = int((similar_df["peak_180d"]>=50).sum())
-    p10_n  = int((similar_df["peak_180d"]>=10).sum())
     loss_n = int((similar_df["ret_180d"]<=-20).sum())
     win_n  = int((similar_df["ret_180d"]>0).sum())
-    avg_peak_col = _peak_color(avg_peak); avg_ret_col = _ret_color(avg_ret)
-    st.markdown(f"""
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
-  <div style="background:{avg_peak_col};color:white;border-radius:8px;padding:14px 16px;">
-    <div style="font-size:10px;opacity:0.85;letter-spacing:2px;">{label} · 고점 도달</div>
-    <div style="font-size:28px;font-weight:900;margin-top:4px;">평균 {avg_peak:+.0f}%</div>
-    <div style="font-size:11px;opacity:0.9;">중앙 {med_peak:+.0f}% · n={n}</div>
-    <div style="font-size:11px;margin-top:6px;opacity:0.95;">
-      SW {sw_n} · 100+ {p100_n} · 50+ {p50_n} · 10+ {p10_n}
-    </div>
-  </div>
-  <div style="background:{avg_ret_col};color:white;border-radius:8px;padding:14px 16px;">
-    <div style="font-size:10px;opacity:0.85;letter-spacing:2px;">{label} · 180일 종가</div>
-    <div style="font-size:28px;font-weight:900;margin-top:4px;">평균 {avg_ret:+.0f}%</div>
-    <div style="font-size:11px;opacity:0.9;">중앙 {med_ret:+.0f}% · n={n}</div>
-    <div style="font-size:11px;margin-top:6px;opacity:0.95;">
-      익절 {win_n} · 손절 {loss_n} · 승률 {win_n/max(n,1)*100:.0f}%
-    </div>
-  </div>
-</div>
-""", unsafe_allow_html=True)
+    peak_col = _peak_color(avg_peak); ret_col = _ret_color(avg_ret)
+    st.markdown(
+        f'<div style="margin-top:8px;padding:8px 12px;background:#FAFAFA;border-radius:6px;'
+        f'font-size:12px;color:#374151;">'
+        f'<b>{label}</b> · '
+        f'고점 <span style="color:{peak_col};font-weight:700;">{avg_peak:+.0f}%</span> · '
+        f'180일 <span style="color:{ret_col};font-weight:700;">{avg_ret:+.0f}%</span> · '
+        f'<span style="color:#9CA3AF;">SW {sw_n} / 100+ {p100_n} / 50+ {p50_n} / 손절 {loss_n} · 승률 {win_n/max(n,1)*100:.0f}%</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
 
 # ============== 메인 카드 (이모지 0, 면처리 강조 %) ==============
@@ -687,13 +674,19 @@ def _render_pick_card(row: pd.Series, show_similar: bool = True):
         f'<span style="color:{main_color};font-size:11px;font-weight:700;margin-left:6px;">{main_strength}</span>'
         if main_strength else ""
     )
-    # 현재 수익률 헤더용 (흰글자)
+    # 현재 수익률 — 흰 배경 박스로 매수가와 명확히 분리 + 컬러 강조
     cur_html_header = ""
     if cur_ret is not None and pd.notna(cur_ret):
-        # 익절/손절 색상은 헤더에서 흰색 위 살짝 강조
+        cret_col = _ret_color(cur_ret)
+        # +면 진초록, -면 진빨강. 흰 배경 박스 + 컬러 글자 → 헤더(빨강 등) 위에서 강하게 도드라짐
         cur_html_header = (
-            f'<div style="font-size:11px;color:white;opacity:0.9;font-weight:700;margin-top:3px;">'
-            f'현재 {cur_ret:+.1f}% ({cur_price:,.0f}원)</div>'
+            f'<div style="background:white;padding:6px 12px;border-radius:6px;'
+            f'margin-top:8px;display:inline-block;box-shadow:0 1px 3px rgba(0,0,0,0.1);">'
+            f'<div style="font-size:9px;color:#9CA3AF;letter-spacing:1px;font-weight:700;">현재가</div>'
+            f'<div style="font-size:18px;color:{cret_col};font-weight:900;line-height:1.1;">'
+            f'{cur_ret:+.1f}%</div>'
+            f'<div style="font-size:11px;color:#6B7280;font-weight:600;">{cur_price:,.0f}원</div>'
+            f'</div>'
         )
 
     # 기업분석 인라인 HTML (디폴트 노출)
