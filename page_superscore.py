@@ -299,6 +299,140 @@ def _prob_bar(label: str, prob_pct: float, color: str, is_main: bool = False):
     )
 
 
+def _peak_color(v):
+    """최고가 도달률에 따른 색상"""
+    if pd.isna(v): return "#9CA3AF"
+    if v >= 200: return "#B91C1C"   # 슈퍼위너 진빨강
+    if v >= 100: return "#DC2626"   # 100%+ 빨강
+    if v >= 50:  return "#F97316"   # 50%+ 주황
+    if v >= 30:  return "#F59E0B"   # 30%+ 호박
+    if v >= 10:  return "#10B981"   # 10%+ 초록
+    return "#9CA3AF"
+
+
+def _ret_color(v):
+    """180일 종가 수익률 색상"""
+    if pd.isna(v): return "#9CA3AF"
+    if v <= -20: return "#7F1D1D"   # 손절 진빨강
+    if v <= -5:  return "#DC2626"   # 음수 빨강
+    if v < 5:    return "#9CA3AF"   # 보합 회색
+    if v < 30:   return "#10B981"   # 소폭 익절 초록
+    if v < 100:  return "#059669"   # 큰 익절 진초록
+    return "#047857"                # 대박 진초록
+
+
+def _peak_label(v):
+    """peak% → 등급 라벨"""
+    if pd.isna(v): return "—"
+    if v >= 200: return "🏆 SW"
+    if v >= 100: return "💯 100+"
+    if v >= 50:  return "📈 50+"
+    if v >= 30:  return "📊 30+"
+    if v >= 10:  return "✅ 10+"
+    return "💤"
+
+
+def _render_similar_cards(similar_df: pd.DataFrame, show_stock_name: bool = False):
+    """유사 종목/사례를 HTML 카드로 — 고점% 와 180일종가% 강하게 표시"""
+    html = '<div style="margin:6px 0;">'
+    for _, r in similar_df.iterrows():
+        try: d = pd.to_datetime(r.get("Date")).strftime("%Y-%m-%d")
+        except: d = ""
+        nm = r.get("Name", "")
+        cd = r.get("Code", "")
+        peak = r.get("peak_180d", float("nan"))
+        ret_ = r.get("ret_180d", float("nan"))
+        close_buy = r.get("Close", 0) or 0
+        close_sell = r.get("sell_close", 0) or 0
+
+        peak_col = _peak_color(peak)
+        ret_col  = _ret_color(ret_)
+        peak_lbl = _peak_label(peak)
+
+        peak_txt = f"{peak:+.1f}%" if pd.notna(peak) else "—"
+        ret_txt  = f"{ret_:+.1f}%" if pd.notna(ret_) else "—"
+
+        name_block = (
+            f'<div style="font-weight:700;font-size:13px;color:#111;">{nm} '
+            f'<span style="color:#9CA3AF;font-weight:400;font-size:11px;">{cd}</span></div>'
+            if show_stock_name else ""
+        )
+
+        html += f"""
+<div style="display:grid;grid-template-columns:90px 1fr 130px 130px;gap:10px;align-items:center;
+            padding:10px 12px;background:white;border:1px solid #F3F4F6;
+            border-left:3px solid {peak_col};border-radius:6px;margin-bottom:6px;">
+  <div style="font-size:11px;color:#6B7280;">{d}</div>
+  <div>
+    {name_block}
+    <div style="font-size:11px;color:#9CA3AF;margin-top:2px;">
+      매수 {close_buy:,.0f} → 매도 {close_sell:,.0f}
+    </div>
+  </div>
+  <div style="text-align:center;background:{peak_col}15;padding:6px 8px;border-radius:6px;
+              border:1px solid {peak_col}40;">
+    <div style="font-size:10px;color:#6B7280;font-weight:600;letter-spacing:0.5px;">고점 도달</div>
+    <div style="font-size:16px;font-weight:900;color:{peak_col};line-height:1.1;">{peak_txt}</div>
+    <div style="font-size:10px;color:{peak_col};font-weight:700;">{peak_lbl}</div>
+  </div>
+  <div style="text-align:center;background:{ret_col}15;padding:6px 8px;border-radius:6px;
+              border:1px solid {ret_col}40;">
+    <div style="font-size:10px;color:#6B7280;font-weight:600;letter-spacing:0.5px;">180일 종가</div>
+    <div style="font-size:16px;font-weight:900;color:{ret_col};line-height:1.1;">{ret_txt}</div>
+    <div style="font-size:10px;color:{ret_col};font-weight:700;">
+      {"❌ 손절" if pd.notna(ret_) and ret_ <= -20 else ("💚 익절" if pd.notna(ret_) and ret_ > 0 else "💤 보합")}
+    </div>
+  </div>
+</div>"""
+    html += "</div>"
+    st.markdown(html, unsafe_allow_html=True)
+
+
+def _render_similar_summary(similar_df: pd.DataFrame, label: str = "📊 평균"):
+    """요약 카드 — 평균 고점% + 평균 180일종가% + 적중 분포"""
+    n = len(similar_df)
+    avg_peak = similar_df["peak_180d"].mean()
+    med_peak = similar_df["peak_180d"].median()
+    avg_ret  = similar_df["ret_180d"].mean()
+    med_ret  = similar_df["ret_180d"].median()
+    sw_n     = int((similar_df["peak_180d"]>=200).sum())
+    p100_n   = int((similar_df["peak_180d"]>=100).sum())
+    p50_n    = int((similar_df["peak_180d"]>=50).sum())
+    p10_n    = int((similar_df["peak_180d"]>=10).sum())
+    loss_n   = int((similar_df["ret_180d"]<=-20).sum())
+    win_n    = int((similar_df["ret_180d"]>0).sum())
+
+    avg_peak_col = _peak_color(avg_peak)
+    avg_ret_col  = _ret_color(avg_ret)
+
+    st.markdown(f"""
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
+  <div style="background:{avg_peak_col}10;border:1px solid {avg_peak_col}40;
+              border-radius:8px;padding:10px 14px;">
+    <div style="font-size:10px;color:#6B7280;font-weight:600;letter-spacing:1px;">{label} · 고점 도달</div>
+    <div style="font-size:22px;font-weight:900;color:{avg_peak_col};margin-top:2px;">
+      평균 {avg_peak:+.0f}%
+    </div>
+    <div style="font-size:11px;color:#6B7280;">중앙 {med_peak:+.0f}% · n={n}</div>
+    <div style="font-size:11px;color:#374151;margin-top:4px;">
+      🏆 SW {sw_n} · 💯 100+ {p100_n} · 📈 50+ {p50_n} · ✅ 10+ {p10_n}
+    </div>
+  </div>
+  <div style="background:{avg_ret_col}10;border:1px solid {avg_ret_col}40;
+              border-radius:8px;padding:10px 14px;">
+    <div style="font-size:10px;color:#6B7280;font-weight:600;letter-spacing:1px;">{label} · 180일 종가</div>
+    <div style="font-size:22px;font-weight:900;color:{avg_ret_col};margin-top:2px;">
+      평균 {avg_ret:+.0f}%
+    </div>
+    <div style="font-size:11px;color:#6B7280;">중앙 {med_ret:+.0f}% · n={n}</div>
+    <div style="font-size:11px;color:#374151;margin-top:4px;">
+      💚 익절 {win_n} · ❌ 손절 {loss_n} · 승률 {win_n/max(n,1)*100:.0f}%
+    </div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+
 def _render_pick_card(row: pd.Series, show_similar: bool = True):
     grade = row.get("등급", "")
     code = row.get("Code", "")
@@ -432,50 +566,15 @@ def _render_pick_card(row: pd.Series, show_similar: bool = True):
         similar_same = _find_similar_cases(code, n=5)
         if len(similar_same) > 0:
             with st.expander(f"🔍 {name} 과거 매수 사례 ({len(similar_same)}건)", expanded=False):
-                hist_show = similar_same[[c for c in ["Date","Close","sell_close","ret_180d","peak_180d"] if c in similar_same.columns]].copy()
-                hist_show = hist_show.rename(columns={
-                    "Date":"발생일","Close":"매수가","sell_close":"매도가",
-                    "ret_180d":"180일 수익률(%)","peak_180d":"최고가 도달(%)"
-                })
-                if "발생일" in hist_show.columns:
-                    hist_show["발생일"] = pd.to_datetime(hist_show["발생일"]).dt.strftime("%Y-%m-%d")
-                for c in ["180일 수익률(%)","최고가 도달(%)"]:
-                    if c in hist_show.columns:
-                        hist_show[c] = hist_show[c].round(1)
-                st.dataframe(hist_show, hide_index=True, use_container_width=True)
-
-                if "peak_180d" in similar_same.columns:
-                    avg_peak = similar_same["peak_180d"].mean()
-                    sw_count = (similar_same["peak_180d"]>=200).sum()
-                    w100_count = (similar_same["peak_180d"]>=100).sum()
-                    st.caption(f"📊 평균 최고가: +{avg_peak:.0f}% · 슈퍼위너 {sw_count}건 · 100%+ {w100_count}건")
+                _render_similar_cards(similar_same, show_stock_name=False)
+                _render_similar_summary(similar_same, label="📊 같은 종목 과거")
 
         # 2) 비슷한 패턴의 다른 종목들 (유사도 기반)
         similar_other = _find_similar_stocks(row, n=5, exclude_code=code)
         if len(similar_other) > 0:
             with st.expander(f"🎭 {name} 와 비슷한 패턴 종목 ({len(similar_other)}건)", expanded=False):
-                show = similar_other[[c for c in ["Date","Code","Name","Market","Close","sell_close","ret_180d","peak_180d","p_sw","p_loss"] if c in similar_other.columns]].copy()
-                show = show.rename(columns={
-                    "Date":"발생일","Code":"종목코드","Name":"종목명","Market":"시장",
-                    "Close":"매수가","sell_close":"매도가",
-                    "ret_180d":"180일수익률(%)","peak_180d":"최고가도달(%)",
-                    "p_sw":"슈퍼위너확률","p_loss":"손절확률"
-                })
-                if "발생일" in show.columns:
-                    show["발생일"] = pd.to_datetime(show["발생일"]).dt.strftime("%Y-%m-%d")
-                for c in ["180일수익률(%)","최고가도달(%)"]:
-                    if c in show.columns:
-                        show[c] = show[c].round(1)
-                for c in ["슈퍼위너확률","손절확률"]:
-                    if c in show.columns:
-                        show[c] = (show[c]*100).round(0).astype(str) + "%"
-                st.dataframe(show, hide_index=True, use_container_width=True)
-
-                avg_peak_o = similar_other["peak_180d"].mean()
-                sw_count_o = (similar_other["peak_180d"]>=200).sum()
-                w100_count_o = (similar_other["peak_180d"]>=100).sum()
-                loss_count_o = (similar_other["ret_180d"]<=-20).sum()
-                st.caption(f"📊 유사 패턴 평균 최고가: +{avg_peak_o:.0f}% · 슈퍼위너 {sw_count_o}건 · 100%+ {w100_count_o}건 · 손절 {loss_count_o}건")
+                _render_similar_cards(similar_other, show_stock_name=True)
+                _render_similar_summary(similar_other, label="📊 유사 패턴")
                 st.caption("💡 슈퍼위너/100%+/50%+/손절 확률이 비슷한 다른 종목의 과거 매수 결과")
 
 
