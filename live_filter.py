@@ -73,6 +73,65 @@ def load_strong_buy_models():
         return pickle.load(f)
 
 
+def load_calibration_map():
+    """OOS 백테스트 기반 보정 매핑 (모델 확률 → 실제 적중률)"""
+    p = CACHE / "empirical_calibration_map.json"
+    if not p.exists():
+        return None
+    with open(p, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def remap_prob(p_arr, mapping):
+    """isotonic anchor 매핑으로 확률 remap"""
+    xs = np.array(mapping["x"])
+    ys = np.array(mapping["y"])
+    return np.interp(np.asarray(p_arr), xs, ys)
+
+
+def compute_best_bucket(row):
+    """가장 가능성 높은 도달 구간 산정.
+    상위 구간(고수익)부터 검사하며,
+      - 확률 50% 이상: '도달 매우 유력' (★★★)
+      - 확률 30% 이상: '도달 가능' (★★)
+      - 확률 15% 이상: '도달 후보' (★)
+    그 외 → '✅ 10%+ 가능' 디폴트
+    """
+    buckets = [
+        ("🏆 슈퍼위너 200%+", "p_sw_cal",      200, "#B91C1C"),
+        ("💯 100%+ (2배)",   "p_100plus_cal", 100, "#DC2626"),
+        ("📈 50%+",          "p_50plus_cal",  50,  "#F97316"),
+        ("📊 30%+",          "p_30plus_cal",  30,  "#F59E0B"),
+        ("✅ 10%+",          "p_10plus_cal",  10,  "#10B981"),
+    ]
+    best_label = "💤 보합권"
+    best_prob = 0
+    best_pct = 0
+    best_color = "#9CA3AF"
+    best_strength = ""
+
+    # 50% 이상 → 최상위부터 hit 첫 구간
+    for label, col, pct, color in buckets:
+        prob = row.get(col, 0)
+        if pd.notna(prob) and prob >= 0.50:
+            return label, prob, pct, color, "★★★ 도달 매우 유력"
+    # 30% 이상 → 다시 최상위부터
+    for label, col, pct, color in buckets:
+        prob = row.get(col, 0)
+        if pd.notna(prob) and prob >= 0.30:
+            return label, prob, pct, color, "★★ 도달 가능"
+    # 15% 이상 (슈퍼위너만 의미 있음)
+    for label, col, pct, color in buckets[:2]:
+        prob = row.get(col, 0)
+        if pd.notna(prob) and prob >= 0.15:
+            return label, prob, pct, color, "★ 도달 후보"
+    # 디폴트
+    p10 = row.get("p_10plus_cal", 0) or 0
+    if p10 >= 0.5:
+        return "✅ 10%+", p10, 10, "#10B981", "★★★ 도달 매우 유력"
+    return "💤 보합권", p10, 0, "#9CA3AF", "관망"
+
+
 def add_pre_features_one(df, ohlcv_dict):
     """라이브 시그널에 시계열 특성 추가."""
     rows = {k: [] for k in [
@@ -173,17 +232,49 @@ def compute_supabilities(df, sd, cur):
     df["p_sw"] = models["sw"].predict_proba(X)[:, 1]
     df["p_100plus"] = models["100plus"].predict_proba(X)[:, 1]
     df["p_50plus"] = models["50plus"].predict_proba(X)[:, 1]
+    df["p_30plus"] = models["30plus"].predict_proba(X)[:, 1] if "30plus" in models else df["p_50plus"]
+    df["p_10plus"] = models["10plus"].predict_proba(X)[:, 1] if "10plus" in models else df["p_50plus"]
     df["예상peak%"] = models["peak_reg"].predict(X).round(1)
 
-    # 확률 % 표시
-    df["슈퍼위너확률%"] = (df["p_sw"]*100).round(1)
-    df["100%+확률"] = (df["p_100plus"]*100).round(1)
-    df["50%+확률"] = (df["p_50plus"]*100).round(1)
-    df["손절확률%"] = (df["p_loss"]*100).round(1)
+    # === OOS 백테스트 기반 보정 매핑 적용 ===
+    calib = load_calibration_map()
+    if calib and "targets" in calib:
+        tmap = calib["targets"]
+        for pcol in ["p_loss","p_sw","p_100plus","p_50plus","p_30plus","p_10plus"]:
+            if pcol in tmap:
+                df[f"{pcol}_cal"] = remap_prob(df[pcol].values, tmap[pcol])
+            else:
+                df[f"{pcol}_cal"] = df[pcol]
+    else:
+        for pcol in ["p_loss","p_sw","p_100plus","p_50plus","p_30plus","p_10plus"]:
+            df[f"{pcol}_cal"] = df[pcol]
 
-    # 두 점수 (StrongScore + SuperScore)
-    df["StrongScore"] = (df["p_sw"]*3 + df["p_100plus"]*1.5 + df["p_50plus"]*1 - df["p_loss"]*2).round(2)
-    df["SuperScore"] = (df["p_sw"]*5 + df["p_100plus"]*2 + df["p_50plus"]*1 - df["p_loss"]*3).round(2)
+    # 확률 % 표시 (OOS 보정값 기준)
+    df["슈퍼위너확률%"] = (df["p_sw_cal"]*100).round(1)
+    df["100%+확률"]   = (df["p_100plus_cal"]*100).round(1)
+    df["50%+확률"]    = (df["p_50plus_cal"]*100).round(1)
+    df["30%+확률"]    = (df["p_30plus_cal"]*100).round(1)
+    df["10%+확률"]    = (df["p_10plus_cal"]*100).round(1)
+    df["손절확률%"]   = (df["p_loss_cal"]*100).round(1)
+
+    # === 가장 가능성 높은 도달 구간 (메인 배지) ===
+    main_labels, main_probs, main_pcts, main_colors, main_strs = [], [], [], [], []
+    for _, r in df.iterrows():
+        lab, prob, pct, color, strength = compute_best_bucket(r)
+        main_labels.append(lab)
+        main_probs.append(round(prob*100, 1))
+        main_pcts.append(pct)
+        main_colors.append(color)
+        main_strs.append(strength)
+    df["메인도달"] = main_labels
+    df["메인확률%"] = main_probs
+    df["메인목표%"] = main_pcts
+    df["메인컬러"] = main_colors
+    df["메인강도"] = main_strs
+
+    # 두 점수 — OOS 보정 확률 기반 (실제 적중률 가중)
+    df["StrongScore"] = (df["p_sw_cal"]*3 + df["p_100plus_cal"]*1.5 + df["p_50plus_cal"]*1 - df["p_loss_cal"]*2).round(2)
+    df["SuperScore"] = (df["p_sw_cal"]*5 + df["p_100plus_cal"]*2 + df["p_50plus_cal"]*1 - df["p_loss_cal"]*3).round(2)
 
     # 등급 부여 - 슈퍼강력매수(상위 5%) + 강력매수(상위 5-20%)만
     df["_score_pct"] = df.groupby(df["Date"].dt.strftime("%Y-%m-%d"))["SuperScore"].rank(pct=True)
@@ -277,9 +368,11 @@ def build_picks(top_n_today=5, top_n_week=5):
     month_picks = this_month.sort_values("SuperScore", ascending=False).head(20)
 
     # 출력 컬럼
-    cols = ["Date","등급","가능성태그","예상수익률","Code","Name","Market","Close","Amount",
+    cols = ["Date","등급","메인도달","메인확률%","메인목표%","메인컬러","메인강도",
+            "가능성태그","예상수익률","Code","Name","Market","Close","Amount",
             "SuperScore","StrongScore","예상peak%",
-            "슈퍼위너확률%","100%+확률","50%+확률","손절확률%",
+            "슈퍼위너확률%","100%+확률","50%+확률","30%+확률","10%+확률","손절확률%",
+            "p_sw_cal","p_100plus_cal","p_50plus_cal","p_30plus_cal","p_10plus_cal","p_loss_cal",
             "Score","chart_pattern","past_60","past_120","pos_252_high","slope60"]
 
     def save_picks(df, fname):

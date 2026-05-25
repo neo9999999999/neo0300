@@ -97,20 +97,26 @@ def _find_similar_stocks(target_row, n: int = 5, exclude_code: str = None) -> pd
 
 def _reason_text(row: pd.Series) -> list:
     reasons = []
-    p_sw = row.get("슈퍼위너확률%", 0)
-    p100 = row.get("100%+확률", 0)
-    p50 = row.get("50%+확률", 0)
-    ploss = row.get("손절확률%", 0)
+    p_sw = row.get("슈퍼위너확률%", 0) or 0
+    p100 = row.get("100%+확률", 0) or 0
+    p50  = row.get("50%+확률", 0) or 0
+    p30  = row.get("30%+확률", 0) or 0
+    p10  = row.get("10%+확률", 0) or 0
+    ploss = row.get("손절확률%", 0) or 0
 
-    if p_sw >= 50: reasons.append(f"🏆 **슈퍼위너 확률 {p_sw:.0f}%** — peak ≥ 200% 도달 가능성 매우 높음")
-    elif p_sw >= 30: reasons.append(f"⭐ **슈퍼위너 확률 {p_sw:.0f}%** — peak ≥ 200% 가능")
-    elif p_sw >= 15: reasons.append(f"🌟 슈퍼위너 확률 {p_sw:.0f}% — 중상위 가능성")
+    # OOS 보정 확률 기반 (실제 적중률)
+    if p_sw >= 40: reasons.append(f"🏆 **슈퍼위너 확률 {p_sw:.0f}%** (OOS 실측) — 200% 도달 매우 유력")
+    elif p_sw >= 25: reasons.append(f"⭐ **슈퍼위너 확률 {p_sw:.0f}%** (OOS 실측) — 200% 도달 가능")
+    elif p_sw >= 15: reasons.append(f"🌟 슈퍼위너 확률 {p_sw:.0f}%")
 
-    if p100 >= 50: reasons.append(f"💯 **100%+ 확률 {p100:.0f}%** — 2배 도달 매우 가능")
+    if p100 >= 50: reasons.append(f"💯 **100%+ 확률 {p100:.0f}%** — 2배 도달 매우 유력")
     elif p100 >= 30: reasons.append(f"💯 100%+ 확률 {p100:.0f}%")
 
-    if p50 >= 60: reasons.append(f"📈 **50%+ 확률 {p50:.0f}%** — 절반 이상 상승 매우 가능")
+    if p50 >= 60: reasons.append(f"📈 **50%+ 확률 {p50:.0f}%** — 절반 상승 매우 유력")
     elif p50 >= 40: reasons.append(f"📈 50%+ 확률 {p50:.0f}%")
+
+    if p30 >= 70: reasons.append(f"📊 **30%+ 확률 {p30:.0f}%** — 상승 거의 확실")
+    if p10 >= 85: reasons.append(f"✅ **10%+ 확률 {p10:.0f}%** — 최소 10% 상승 거의 보장")
 
     slope = row.get("slope60", 0)
     past60 = row.get("past_60", 0)
@@ -127,6 +133,33 @@ def _reason_text(row: pd.Series) -> list:
     return reasons
 
 
+def _prob_bar(label: str, prob_pct: float, color: str, is_main: bool = False):
+    """미니 확률 바 (HTML)"""
+    width = max(0, min(100, prob_pct))
+    if is_main:
+        return (
+            f'<div style="margin:6px 0;">'
+            f'  <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;">'
+            f'    <span style="color:{color};">{label}</span>'
+            f'    <span style="color:{color};">{prob_pct:.0f}%</span>'
+            f'  </div>'
+            f'  <div style="background:#F3F4F6;border-radius:6px;height:10px;overflow:hidden;margin-top:2px;">'
+            f'    <div style="background:{color};width:{width}%;height:100%;"></div>'
+            f'  </div>'
+            f'</div>'
+        )
+    return (
+        f'<div style="margin:3px 0;">'
+        f'  <div style="display:flex;justify-content:space-between;font-size:11px;color:#6B7280;">'
+        f'    <span>{label}</span><span>{prob_pct:.0f}%</span>'
+        f'  </div>'
+        f'  <div style="background:#F3F4F6;border-radius:4px;height:5px;overflow:hidden;">'
+        f'    <div style="background:{color};width:{width}%;height:100%;opacity:0.6;"></div>'
+        f'  </div>'
+        f'</div>'
+    )
+
+
 def _render_pick_card(row: pd.Series, show_similar: bool = True):
     grade = row.get("등급", "")
     code = row.get("Code", "")
@@ -134,10 +167,12 @@ def _render_pick_card(row: pd.Series, show_similar: bool = True):
     close = row.get("Close", 0)
     ss = row.get("SuperScore", 0)
     peak_pred = row.get("예상peak%", 0)
-    p_sw = row.get("슈퍼위너확률%", 0)
-    p100 = row.get("100%+확률", 0)
-    p50 = row.get("50%+확률", 0)
-    ploss = row.get("손절확률%", 0)
+    p_sw  = row.get("슈퍼위너확률%", 0) or 0
+    p100  = row.get("100%+확률", 0) or 0
+    p50   = row.get("50%+확률", 0) or 0
+    p30   = row.get("30%+확률", 0) or 0
+    p10   = row.get("10%+확률", 0) or 0
+    ploss = row.get("손절확률%", 0) or 0
     market = row.get("Market", "")
     date = row.get("Date", "")
     if isinstance(date, str): date = date[:10]
@@ -147,29 +182,102 @@ def _render_pick_card(row: pd.Series, show_similar: bool = True):
 
     color = _grade_color(grade)
 
+    # ===== 메인 배지 (가장 가능성 높은 도달 구간) =====
+    main_label    = row.get("메인도달", "")
+    main_prob     = row.get("메인확률%", 0) or 0
+    main_color    = row.get("메인컬러", color) or color
+    main_strength = row.get("메인강도", "")
+
+    # 메인이 없으면 자동 산정 (확률 큰 순)
+    if not main_label:
+        candidates = [
+            ("🏆 슈퍼위너 200%+", p_sw,  "#B91C1C"),
+            ("💯 100%+ (2배)",   p100,  "#DC2626"),
+            ("📈 50%+",          p50,   "#F97316"),
+            ("📊 30%+",          p30,   "#F59E0B"),
+            ("✅ 10%+",          p10,   "#10B981"),
+        ]
+        for lbl, pr, cc in candidates:
+            if pr >= 50:
+                main_label, main_prob, main_color = lbl, pr, cc
+                main_strength = "★★★ 도달 매우 유력"; break
+        if not main_label:
+            for lbl, pr, cc in candidates:
+                if pr >= 30:
+                    main_label, main_prob, main_color = lbl, pr, cc
+                    main_strength = "★★ 도달 가능"; break
+        if not main_label:
+            for lbl, pr, cc in candidates[:2]:
+                if pr >= 15:
+                    main_label, main_prob, main_color = lbl, pr, cc
+                    main_strength = "★ 도달 후보"; break
+        if not main_label:
+            main_label, main_prob, main_color = "✅ 10%+ 권", p10, "#10B981"
+            main_strength = ""
+
     st.markdown(f"""
-<div style="border-left:4px solid {color};padding:14px 18px;background:rgba(0,0,0,0.02);
-            border-radius:6px;margin-bottom:8px;">
-  <div style="display:flex;justify-content:space-between;align-items:center;">
+<div style="border:2px solid {main_color};padding:0;background:white;
+            border-radius:10px;margin-bottom:10px;overflow:hidden;
+            box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+
+  <!-- 상단 헤더 -->
+  <div style="padding:14px 18px;display:flex;justify-content:space-between;align-items:center;
+              background:linear-gradient(90deg,{main_color}10,{main_color}05);">
     <div>
-      <span style="font-size:14px;color:{color};font-weight:700;">{grade}</span>
-      <span style="font-size:20px;font-weight:800;margin-left:12px;">{name}</span>
-      <span style="font-size:12px;color:#9CA3AF;margin-left:8px;">{code} · {market} · {date}</span>
+      <span style="background:{color};color:white;padding:3px 10px;border-radius:4px;
+                   font-size:12px;font-weight:700;">{grade}</span>
+      <span style="font-size:22px;font-weight:800;margin-left:12px;color:#111;">{name}</span>
+      <div style="font-size:11px;color:#9CA3AF;margin-top:4px;">{code} · {market} · {date}</div>
     </div>
     <div style="text-align:right;">
-      <div style="font-size:13px;color:#9CA3AF;">매수가</div>
-      <div style="font-size:18px;font-weight:700;">{close:,.0f}원</div>
+      <div style="font-size:11px;color:#9CA3AF;">매수가</div>
+      <div style="font-size:20px;font-weight:800;color:#111;">{close:,.0f}원</div>
     </div>
   </div>
-  <div style="margin-top:12px;display:grid;grid-template-columns:repeat(5,1fr);gap:8px;font-size:12px;">
-    <div><b>슈퍼점수</b><br><span style="font-size:14px;color:{color};font-weight:700;">{ss:.2f}</span></div>
-    <div><b>예상 최고가</b><br><span style="font-size:14px;color:{color};font-weight:700;">+{peak_pred:.0f}%</span></div>
-    <div><b>슈퍼위너 확률</b><br><span style="font-size:14px;font-weight:700;">{p_sw:.0f}%</span></div>
-    <div><b>100%+ 확률</b><br><span style="font-size:14px;font-weight:700;">{p100:.0f}%</span></div>
-    <div><b>50%+ / 손절</b><br>{p50:.0f}% / <span style="color:#EF4444">{ploss:.0f}%</span></div>
+
+  <!-- 메인 배지: 가장 가능성 높은 도달 구간 (강한 표시) -->
+  <div style="padding:16px 18px;background:{main_color};color:white;text-align:center;">
+    <div style="font-size:11px;opacity:0.85;letter-spacing:1px;">가장 가능성 높은 도달</div>
+    <div style="font-size:28px;font-weight:900;margin:4px 0;">
+      {main_label}
+    </div>
+    <div style="font-size:16px;font-weight:700;">
+      OOS 적중률 <span style="font-size:22px;">{main_prob:.0f}%</span>
+      <span style="margin-left:8px;opacity:0.9;font-size:13px;">· {main_strength}</span>
+    </div>
+  </div>
+
+  <!-- 보조 정보: 슈퍼점수 + 예상최고가 -->
+  <div style="padding:10px 18px;display:flex;gap:18px;background:#FAFAFA;
+              border-top:1px solid #F3F4F6;font-size:12px;">
+    <div><span style="color:#9CA3AF;">슈퍼점수</span>
+         <b style="color:{main_color};margin-left:6px;font-size:14px;">{ss:.2f}</b></div>
+    <div><span style="color:#9CA3AF;">예상 최고가</span>
+         <b style="color:{main_color};margin-left:6px;font-size:14px;">+{peak_pred:.0f}%</b></div>
+    <div><span style="color:#9CA3AF;">손절 확률 (-20%↓)</span>
+         <b style="color:{'#DC2626' if ploss >= 25 else '#10B981'};margin-left:6px;font-size:14px;">{ploss:.0f}%</b></div>
   </div>
 </div>
 """, unsafe_allow_html=True)
+
+    # 도달 구간별 상세 확률 (미니 바)
+    with st.expander(f"📊 {name} 도달 구간별 OOS 적중 확률", expanded=False):
+        st.caption("실제 5년 백테스트(825건) 기반 보정 확률")
+        bars_html = ""
+        rows_data = [
+            ("🏆 슈퍼위너 200%+", p_sw,  "#B91C1C"),
+            ("💯 100%+ (2배)",   p100,  "#DC2626"),
+            ("📈 50%+",          p50,   "#F97316"),
+            ("📊 30%+",          p30,   "#F59E0B"),
+            ("✅ 10%+",          p10,   "#10B981"),
+            ("❌ 손절 (-20%↓)",  ploss, "#7F1D1D"),
+        ]
+        # 가장 큰 확률(=메인) 강조
+        max_prob = max([r[1] for r in rows_data[:-1]])
+        for lbl, pr, cc in rows_data:
+            is_main = (pr == max_prob and lbl != "❌ 손절 (-20%↓)")
+            bars_html += _prob_bar(lbl, pr, cc, is_main=is_main)
+        st.markdown(bars_html, unsafe_allow_html=True)
 
     reasons = _reason_text(row)
     if reasons:

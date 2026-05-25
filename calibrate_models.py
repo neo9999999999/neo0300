@@ -31,10 +31,12 @@ available = [f for f in FEATURES if f in pool.columns]
 X, _ = prepare_X(pool, features=available)
 
 targets = {
-    "loss": (pool["ret_180d"]<=-20).astype(int),
-    "sw": (pool["peak_180d"]>=200).astype(int),
+    "loss":    (pool["ret_180d"]<=-20).astype(int),
+    "sw":      (pool["peak_180d"]>=200).astype(int),
     "100plus": (pool["peak_180d"]>=100).astype(int),
-    "50plus": (pool["peak_180d"]>=50).astype(int),
+    "50plus":  (pool["peak_180d"]>=50).astype(int),
+    "30plus":  (pool["peak_180d"]>=30).astype(int),
+    "10plus":  (pool["peak_180d"]>=10).astype(int),
 }
 
 print("\n[Calibrated 학습 (isotonic, 5-fold)]")
