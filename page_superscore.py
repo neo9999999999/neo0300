@@ -71,38 +71,106 @@ def _find_similar_cases(code: str, n: int = 5) -> pd.DataFrame:
     return same.sort_values("Date", ascending=False).head(n)
 
 
+# === 유사도 차트 특성 (캐시) ===
+_ENRICHED_CACHE = {}
+
+def _get_enriched_signals():
+    """signals_2000_enriched.parquet 캐시 로드"""
+    if "df" not in _ENRICHED_CACHE:
+        p = CACHE / "signals_2000_enriched.parquet"
+        if p.exists():
+            df = pd.read_parquet(p)
+            df["Date"] = pd.to_datetime(df["Date"])
+            df["Code"] = df["Code"].astype(str).str.zfill(6)
+            _ENRICHED_CACHE["df"] = df
+        else:
+            _ENRICHED_CACHE["df"] = None
+    return _ENRICHED_CACHE["df"]
+
+
+# 유사도 벡터 차원
+# - 가격 흐름: past_60, past_120, past_240, slope60, runup60
+# - 신고가/위치: pos_252_high, pos_120_high, pos_60_high, days_since_52w_high
+# - 변동성/조정: drawdown60, range60_pct, range120_pct
+# - 거래/수급: vol_ratio, For_5d, For_20d, Inst_5d, Inst_20d
+# - 모델 확률: p_sw, p_100plus, p_50plus
+SIMILARITY_FEATURES = {
+    "past_60":       {"weight": 1.5, "scale": 30},   # 60일 등락률
+    "past_120":      {"weight": 1.2, "scale": 50},
+    "past_240":      {"weight": 1.0, "scale": 80},
+    "slope60":       {"weight": 1.2, "scale": 2.0},
+    "runup60":       {"weight": 1.0, "scale": 40},
+    "pos_252_high":  {"weight": 1.5, "scale": 30},   # 신고가 위치
+    "pos_120_high":  {"weight": 1.0, "scale": 25},
+    "pos_60_high":   {"weight": 1.0, "scale": 20},
+    "drawdown60":    {"weight": 1.0, "scale": 20},
+    "range60_pct":   {"weight": 0.8, "scale": 30},
+    "vol_ratio":     {"weight": 0.8, "scale": 2.0},  # 거래량 비율
+    "For_5d":        {"weight": 0.8, "scale": 200},  # 외인 5일 (억)
+    "For_20d":       {"weight": 0.6, "scale": 800},
+    "Inst_5d":       {"weight": 0.8, "scale": 200},
+    "Inst_20d":      {"weight": 0.6, "scale": 800},
+    "p_sw":          {"weight": 0.7, "scale": 0.2},  # 모델 확률 (보조)
+    "p_100plus":     {"weight": 0.5, "scale": 0.2},
+}
+
+
 def _find_similar_stocks(target_row, n: int = 5, exclude_code: str = None) -> pd.DataFrame:
-    path = CACHE / "MASTER_best_picks_2020-2026.csv"
-    if not path.exists(): return pd.DataFrame()
-    hist = pd.read_csv(path)
-    hist["Date"] = pd.to_datetime(hist["Date"])
+    """차트/신고가/수급/모델확률 다차원 유사도 (시그널 풀 + 백테스트 결과 머지)"""
+    sigs = _get_enriched_signals()
+    if sigs is None: return pd.DataFrame()
+    master_path = CACHE / "MASTER_best_picks_2020-2026.csv"
+    if not master_path.exists(): return pd.DataFrame()
+    master = pd.read_csv(master_path)
+    master["Date"] = pd.to_datetime(master["Date"])
+    master["Code"] = master["Code"].astype(str).str.zfill(6)
+    master_keys = master.set_index(["Date","Code"])[["peak_180d","ret_180d","sell_close","p_sw","p_100plus","p_50plus","p_loss"]]
+
+    # 시그널 풀에서 결과 있는 것만 (백테스트 결과 머지)
+    pool = sigs[sigs["Code"].isin(master["Code"].unique())].copy()
+    pool = pool.merge(master_keys.reset_index()[["Date","Code","peak_180d","ret_180d","sell_close"]],
+                       on=["Date","Code"], how="inner")
     if exclude_code:
-        hist = hist[hist["Code"].astype(str) != str(exclude_code)].copy()
-    var_cols = ["p_sw", "p_100plus", "p_50plus", "p_loss"]
-    var_cols = [c for c in var_cols if c in hist.columns]
-    if not var_cols: return pd.DataFrame()
-    hist = hist.dropna(subset=var_cols).copy()
-    if len(hist) == 0: return pd.DataFrame()
+        pool = pool[pool["Code"] != str(exclude_code).zfill(6)].copy()
+
+    # 사용 가능한 피처만
+    feat_cols = [c for c in SIMILARITY_FEATURES if c in pool.columns]
+    if not feat_cols: return pd.DataFrame()
+    pool = pool.dropna(subset=feat_cols).copy()
+    if len(pool) == 0: return pd.DataFrame()
+
+    # 타깃 벡터
     target_vals = []
-    for c in var_cols:
-        v_raw = target_row.get(c, None)
-        if v_raw is None:
+    for c in feat_cols:
+        v = target_row.get(c)
+        if v is None and c in ("p_sw","p_100plus","p_50plus","p_loss"):
             pct_col = {"p_sw":"슈퍼위너확률%","p_100plus":"100%+확률","p_50plus":"50%+확률","p_loss":"손절확률%"}.get(c)
             if pct_col and pct_col in target_row.index:
-                try: v_raw = float(target_row[pct_col]) / 100
-                except Exception: v_raw = 0
-            else: v_raw = 0
-        target_vals.append(float(v_raw) if v_raw is not None else 0)
-    diff_sq = np.zeros(len(hist))
-    for i, c in enumerate(var_cols):
-        diff_sq += (hist[c].values - target_vals[i])**2
-    hist["_distance"] = np.sqrt(diff_sq)
-    similar = hist.sort_values("_distance").drop_duplicates(["Date","Code"]).head(n*3)
-    seen_codes = set(); pick = []
+                try: v = float(target_row[pct_col]) / 100
+                except Exception: v = None
+        try: target_vals.append(float(v) if v is not None and not (isinstance(v,float) and pd.isna(v)) else None)
+        except Exception: target_vals.append(None)
+
+    # 결측은 가중 0으로 (해당 차원 제외)
+    diff_sq = np.zeros(len(pool))
+    for i, c in enumerate(feat_cols):
+        cfg = SIMILARITY_FEATURES[c]
+        w = cfg["weight"]; s = cfg["scale"]
+        tv = target_vals[i]
+        if tv is None or s == 0: continue
+        vals = pool[c].values
+        d = (vals - tv) / s
+        diff_sq += w * (d ** 2)
+    pool["_distance"] = np.sqrt(diff_sq)
+
+    similar = pool.sort_values("_distance").drop_duplicates(["Date","Code"])
+
+    # 다양성: 동일 종목 중복 회피, 추가로 가장 가까운 5건
+    seen = set(); pick = []
     for _, r in similar.iterrows():
         c = str(r["Code"])
-        if c in seen_codes: continue
-        seen_codes.add(c); pick.append(r)
+        if c in seen: continue
+        seen.add(c); pick.append(r)
         if len(pick) >= n: break
     if not pick: return pd.DataFrame()
     return pd.DataFrame(pick)
@@ -320,6 +388,7 @@ def _prob_bar(label: str, prob_pct: float, color: str, is_main: bool = False):
 # ============== 유사 종목 카드 (이모지 없음) ==============
 
 def _render_similar_cards(similar_df: pd.DataFrame, show_stock_name: bool = False):
+    """들여쓰기 없는 한 줄 HTML (Streamlit markdown의 코드블록 오인식 방지)"""
     html = '<div style="margin:6px 0;">'
     for _, r in similar_df.iterrows():
         try: d = pd.to_datetime(r.get("Date")).strftime("%Y-%m-%d")
@@ -333,34 +402,32 @@ def _render_similar_cards(similar_df: pd.DataFrame, show_stock_name: bool = Fals
         peak_lbl = _peak_label_plain(peak)
         peak_txt = f"{peak:+.1f}%" if pd.notna(peak) else "—"
         ret_txt  = f"{ret_:+.1f}%" if pd.notna(ret_) else "—"
+        ret_lbl = "손절" if pd.notna(ret_) and ret_ <= -20 else ("익절" if pd.notna(ret_) and ret_ > 0 else "보합")
         name_block = (
             f'<div style="font-weight:700;font-size:13px;color:#111;">{nm} '
             f'<span style="color:#9CA3AF;font-weight:400;font-size:11px;">{cd}</span></div>'
             if show_stock_name else ""
         )
-        ret_lbl = "손절" if pd.notna(ret_) and ret_ <= -20 else ("익절" if pd.notna(ret_) and ret_ > 0 else "보합")
-        html += f"""
-<div style="display:grid;grid-template-columns:90px 1fr 130px 130px;gap:10px;align-items:center;
-            padding:10px 12px;background:white;border:1px solid #F3F4F6;
-            border-left:3px solid {peak_col};border-radius:6px;margin-bottom:6px;">
-  <div style="font-size:11px;color:#6B7280;">{d}</div>
-  <div>
-    {name_block}
-    <div style="font-size:11px;color:#9CA3AF;margin-top:2px;">
-      매수 {close_buy:,.0f} → 매도 {close_sell:,.0f}
-    </div>
-  </div>
-  <div style="text-align:center;background:{peak_col};padding:8px 6px;border-radius:6px;color:white;">
-    <div style="font-size:9px;opacity:0.85;letter-spacing:1px;">고점 도달</div>
-    <div style="font-size:18px;font-weight:900;line-height:1.1;">{peak_txt}</div>
-    <div style="font-size:10px;font-weight:700;opacity:0.95;">{peak_lbl}</div>
-  </div>
-  <div style="text-align:center;background:{ret_col};padding:8px 6px;border-radius:6px;color:white;">
-    <div style="font-size:9px;opacity:0.85;letter-spacing:1px;">180일 종가</div>
-    <div style="font-size:18px;font-weight:900;line-height:1.1;">{ret_txt}</div>
-    <div style="font-size:10px;font-weight:700;opacity:0.95;">{ret_lbl}</div>
-  </div>
-</div>"""
+        # 한 줄로 압축 — markdown 코드블록 오인식 방지
+        row_html = (
+            f'<div style="display:grid;grid-template-columns:90px 1fr 130px 130px;gap:10px;align-items:center;'
+            f'padding:10px 12px;background:white;border:1px solid #F3F4F6;'
+            f'border-left:3px solid {peak_col};border-radius:6px;margin-bottom:6px;">'
+            f'<div style="font-size:11px;color:#6B7280;">{d}</div>'
+            f'<div>{name_block}'
+            f'<div style="font-size:11px;color:#9CA3AF;margin-top:2px;">'
+            f'매수 {close_buy:,.0f} → 매도 {close_sell:,.0f}</div></div>'
+            f'<div style="text-align:center;background:{peak_col};padding:8px 6px;border-radius:6px;color:white;">'
+            f'<div style="font-size:9px;opacity:0.85;letter-spacing:1px;">고점 도달</div>'
+            f'<div style="font-size:18px;font-weight:900;line-height:1.1;">{peak_txt}</div>'
+            f'<div style="font-size:10px;font-weight:700;opacity:0.95;">{peak_lbl}</div></div>'
+            f'<div style="text-align:center;background:{ret_col};padding:8px 6px;border-radius:6px;color:white;">'
+            f'<div style="font-size:9px;opacity:0.85;letter-spacing:1px;">180일 종가</div>'
+            f'<div style="font-size:18px;font-weight:900;line-height:1.1;">{ret_txt}</div>'
+            f'<div style="font-size:10px;font-weight:700;opacity:0.95;">{ret_lbl}</div></div>'
+            f'</div>'
+        )
+        html += row_html
     html += "</div>"
     st.markdown(html, unsafe_allow_html=True)
 
@@ -467,6 +534,11 @@ def _render_pick_card(row: pd.Series, show_similar: bool = True):
     color = _grade_color(grade_raw)
     summary = _simple_summary(row)
 
+    # 현재 수익률 (지난주/이번주 페이지에서 inject한 값)
+    cur_price = row.get("_현재가")
+    cur_ret = row.get("_현재수익률")
+    cur_date_str = row.get("_현재기준일", "")
+
     # 메인 도달 구간 산정 (이모지 없는 라벨로 변환)
     main_label_raw = row.get("메인도달", "")
     main_prob = row.get("메인확률%", 0) or 0
@@ -500,6 +572,15 @@ def _render_pick_card(row: pd.Series, show_similar: bool = True):
 
     # ===== 카드 HTML (단순) =====
     ploss_col = "#DC2626" if ploss >= 25 else "#10B981"
+    # 현재 수익률 배지 (매수일 이후 경과 시에만)
+    cur_html = ""
+    if cur_ret is not None and pd.notna(cur_ret):
+        cret_col = _ret_color(cur_ret)
+        cur_html = (
+            f'<div style="display:inline-block;background:{cret_col};color:white;'
+            f'padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700;margin-left:8px;">'
+            f'현재 {cur_ret:+.1f}% ({cur_price:,.0f}원)</div>'
+        )
     st.markdown(f"""
 <div style="border:1px solid {main_color}40;background:white;
             border-radius:12px;margin-bottom:14px;overflow:hidden;
@@ -521,6 +602,7 @@ def _render_pick_card(row: pd.Series, show_similar: bool = True):
     <div style="text-align:right;">
       <div style="font-size:9px;color:#9CA3AF;letter-spacing:1px;">매수가</div>
       <div style="font-size:18px;font-weight:800;color:#111;">{close:,.0f}원</div>
+      {cur_html}
     </div>
   </div>
 
@@ -642,7 +724,41 @@ def page_today_pick():
         st.markdown(f"### 강력매수 {len(strong)}건")
         st.caption("정렬: 슈퍼점수 + 슈퍼위너 확률 종합 우선순위")
         for p in strong:
+            # 매수일 이후 1일이라도 지났으면 현재 수익률 inject
+            cur, ret_now, cur_date = _current_return(p.get("Close"), p.get("Code",""))
+            if ret_now is not None:
+                p["_현재가"] = cur; p["_현재수익률"] = ret_now
+                p["_현재기준일"] = cur_date.strftime("%Y-%m-%d") if cur_date is not None else ""
             _render_pick_card(pd.Series(p), show_similar=True)
+
+
+_OHLCV_CACHE = {}
+
+def _get_latest_ohlcv():
+    """가장 큰 OHLCV pkl 캐시 로드"""
+    if "ohlcv" not in _OHLCV_CACHE:
+        import pickle
+        files = sorted(CACHE.glob("ohlcv_*.pkl"), key=lambda p: p.stat().st_size, reverse=True)
+        if files:
+            with open(files[0], "rb") as f:
+                _OHLCV_CACHE["ohlcv"] = pickle.load(f)
+        else:
+            _OHLCV_CACHE["ohlcv"] = {}
+    return _OHLCV_CACHE["ohlcv"]
+
+
+def _current_return(buy_close: float, code: str) -> tuple:
+    """매수가 대비 현재가 수익률 — (현재가, 수익률%, 경과일)"""
+    if not buy_close or buy_close <= 0: return None, None, None
+    ohlcv = _get_latest_ohlcv()
+    code_s = str(code).zfill(6)
+    if code_s not in ohlcv: return None, None, None
+    df = ohlcv[code_s]
+    if len(df) == 0: return None, None, None
+    cur = float(df["Close"].iloc[-1])
+    cur_date = df.index[-1]
+    ret = (cur - buy_close) / buy_close * 100
+    return cur, ret, cur_date
 
 
 def _render_weekly_by_day(picks_list):
@@ -676,7 +792,14 @@ def _render_weekly_by_day(picks_list):
         day_picks.sort(key=pri, reverse=True)
         st.markdown(f"#### {d} ({wd}요일) — {len(day_picks)}건")
         for p in day_picks:
-            # 카드 인라인 렌더 (그 안의 expander가 정상 작동하도록)
+            # 현재 수익률 계산 (매수일 이후 경과한 경우)
+            buy_close = p.get("Close")
+            cur, ret_now, cur_date = _current_return(buy_close, p.get("Code",""))
+            if ret_now is not None:
+                p["_현재가"] = cur
+                p["_현재수익률"] = ret_now
+                p["_현재기준일"] = cur_date.strftime("%Y-%m-%d") if cur_date is not None else ""
+            # 카드 인라인 렌더
             _render_pick_card(pd.Series(p), show_similar=True)
         st.markdown("---")
 
