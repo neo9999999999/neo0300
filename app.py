@@ -129,12 +129,12 @@ with st.sidebar:
     st.markdown(get_logo_html(st.session_state.theme), unsafe_allow_html=True)
 
     PAGES = [
-        ("🎯 오늘의 추천", "ss_today"),
-        ("📅 이번 주", "ss_week"),
-        ("🗓️ 지난 주", "ss_last_week"),
-        ("📊 백테스트", "ss_backtest"),
-        ("🔍 추천 사례 검증", "ss_case"),
-        ("📋 매수 룰", "ss_rule"),
+        ("오늘의 추천", "ss_today"),
+        ("이번 주", "ss_week"),
+        ("지난 주", "ss_last_week"),
+        ("백테스트", "ss_backtest"),
+        ("추천 사례 검증", "ss_case"),
+        ("매수 룰", "ss_rule"),
     ]
     for label, key in PAGES:
         btn_type = "primary" if st.session_state.page == key else "secondary"
