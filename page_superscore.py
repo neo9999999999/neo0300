@@ -989,6 +989,11 @@ def page_backtest():
         "**진행중**: 매수일+260일이 아직 안 지난 케이스 — 표의 수익률/최고가는 **현재까지의 진행값** "
         "(180일 후 더 오르거나 떨어질 수 있음). 결과 분류는 현재까지 도달한 최고가 기준."
     )
+    st.info(
+        "**OOS 검증 데이터**: 모델은 walk-forward 학습 — 2026년 picks는 2025년까지 데이터로만 훈련된 모델이 "
+        "선정한 종목입니다. 수익률은 실제 KRX OHLCV 데이터 기반 (예: 대한광통신 3,205→24,300원). "
+        "단기 폭등 종목이 추출된 건 모델이 의도한 슈퍼위너 발굴 효과."
+    )
 
     # 결과 분류 = peak/ret 기준 (진행중이든 완료든 동일하게)
     def cls(row):
@@ -1072,7 +1077,48 @@ def page_backtest():
     for c in ["슈퍼위너확률","100%+확률","50%+확률","손절확률"]:
         if c in display.columns:
             display[c] = (display[c]*100).round(1).astype(str) + "%"
-    st.dataframe(display, hide_index=True, use_container_width=True, height=600)
+
+    # 결과 컬럼 색상 적용
+    def _result_style(val):
+        cmap = {
+            "슈퍼위너": "background-color:#B91C1C;color:white;font-weight:700;",
+            "100%+":   "background-color:#DC2626;color:white;font-weight:700;",
+            "50%+":    "background-color:#F97316;color:white;font-weight:700;",
+            "30%+":    "background-color:#F59E0B;color:white;font-weight:700;",
+            "10%+":    "background-color:#10B981;color:white;font-weight:700;",
+            "보합":    "background-color:#9CA3AF;color:white;",
+            "손절":    "background-color:#7F1D1D;color:white;font-weight:700;",
+            "미정":    "background-color:#E5E7EB;color:#6B7280;",
+        }
+        return cmap.get(str(val), "")
+
+    def _progress_style(val):
+        if "진행중" in str(val):
+            return "background-color:#FEF3C7;color:#92400E;font-weight:700;"
+        if val == "완료":
+            return "background-color:#D1FAE5;color:#065F46;font-weight:700;"
+        return ""
+
+    def _return_style(val):
+        try:
+            v = float(val)
+            if v >= 100: return "color:#B91C1C;font-weight:800;"
+            if v >= 30:  return "color:#DC2626;font-weight:700;"
+            if v >= 10:  return "color:#10B981;font-weight:700;"
+            if v <= -20: return "color:#7F1D1D;font-weight:800;"
+            if v < 0:    return "color:#DC2626;"
+            return "color:#6B7280;"
+        except Exception: return ""
+
+    styler = display.style
+    if "결과" in display.columns:
+        styler = styler.applymap(_result_style, subset=["결과"])
+    if "진행상태" in display.columns:
+        styler = styler.applymap(_progress_style, subset=["진행상태"])
+    for c in ["수익률(%)","최고가(%)"]:
+        if c in display.columns:
+            styler = styler.applymap(_return_style, subset=[c])
+    st.dataframe(styler, hide_index=True, use_container_width=True, height=600)
 
     # 요약 카드 (선택된 행 기준)
     if len(filtered) > 0:
