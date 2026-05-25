@@ -1139,41 +1139,93 @@ def page_backtest():
 
     st.dataframe(styler, hide_index=True, use_container_width=True, height=600)
 
-    # 요약 카드 (선택된 행 기준)
+    # === 요약 카드 — 매도 실현 기준 단계별 도달률 강조 ===
     if len(filtered) > 0:
-        avg_ret = filtered["ret_180d"].mean()
-        avg_peak = filtered["peak_180d"].mean()
-        sw_n = int((filtered["peak_180d"]>=200).sum())
-        p100_n = int((filtered["peak_180d"]>=100).sum())
-        win_n = int((filtered["ret_180d"]>0).sum())
-        loss_n = int((filtered["ret_180d"]<=-20).sum())
-        total_profit = filtered["수익금_만원"].sum()
         n = len(filtered)
+        avg_ret = filtered["ret_180d"].mean()
+        med_ret = filtered["ret_180d"].median()
+        avg_peak = filtered["peak_180d"].mean()
+        total_profit = filtered["수익금_만원"].sum()
+        invest_amount = n * 10  # 10만원 × n
+        # 매도 실현 기준 도달
+        sw_n   = int((filtered["ret_180d"]>=200).sum())
+        p100_n = int((filtered["ret_180d"]>=100).sum())
+        p50_n  = int((filtered["ret_180d"]>=50).sum())
+        p10_n  = int((filtered["ret_180d"]>=10).sum())
+        win_n  = int((filtered["ret_180d"]>0).sum())
+        loss_n = int((filtered["ret_180d"]<=-20).sum())
+        # 고점 도달 (참고)
+        sw_peak = int((filtered["peak_180d"]>=200).sum())
+        p100_peak = int((filtered["peak_180d"]>=100).sum())
+        p50_peak = int((filtered["peak_180d"]>=50).sum())
+
+        def pct(x): return f"{x/max(n,1)*100:.1f}%"
+        ret_col = "#DC2626" if avg_ret > 0 else "#2563EB"
+        prof_col = "#DC2626" if total_profit > 0 else "#2563EB"
+
+        # Row 1: 핵심 KPI 4개
         st.markdown(f"""
-<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-top:12px;">
-  <div style="background:#FAFAFA;border-radius:6px;padding:8px 12px;text-align:center;">
-    <div style="font-size:10px;color:#6B7280;">선택 건수</div>
-    <div style="font-size:18px;font-weight:800;color:#111;">{n:,}건</div>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:14px;">
+  <div style="background:white;border:1px solid #E5E7EB;border-radius:8px;padding:12px 16px;">
+    <div style="font-size:10px;color:#6B7280;letter-spacing:1px;">선택 건수</div>
+    <div style="font-size:22px;font-weight:800;color:#111;margin-top:2px;">{n:,}<span style="font-size:13px;font-weight:600;color:#6B7280;"> 건</span></div>
+    <div style="font-size:10px;color:#9CA3AF;margin-top:2px;">투자 {invest_amount:,}만원</div>
   </div>
-  <div style="background:#FAFAFA;border-radius:6px;padding:8px 12px;text-align:center;">
-    <div style="font-size:10px;color:#6B7280;">평균 수익률</div>
-    <div style="font-size:18px;font-weight:800;color:{'#DC2626' if avg_ret>0 else '#2563EB'};">{avg_ret:+.1f}%</div>
+  <div style="background:white;border:1px solid #E5E7EB;border-radius:8px;padding:12px 16px;">
+    <div style="font-size:10px;color:#6B7280;letter-spacing:1px;">평균 수익률 (매도)</div>
+    <div style="font-size:22px;font-weight:800;color:{ret_col};margin-top:2px;">{avg_ret:+.1f}%</div>
+    <div style="font-size:10px;color:#9CA3AF;margin-top:2px;">중앙 {med_ret:+.1f}% · 승률 {win_n/max(n,1)*100:.0f}%</div>
   </div>
-  <div style="background:#FAFAFA;border-radius:6px;padding:8px 12px;text-align:center;">
-    <div style="font-size:10px;color:#6B7280;">평균 최고가</div>
-    <div style="font-size:18px;font-weight:800;color:#B91C1C;">+{avg_peak:.0f}%</div>
+  <div style="background:white;border:1px solid #E5E7EB;border-radius:8px;padding:12px 16px;">
+    <div style="font-size:10px;color:#6B7280;letter-spacing:1px;">평균 최고가 도달</div>
+    <div style="font-size:22px;font-weight:800;color:#B91C1C;margin-top:2px;">+{avg_peak:.0f}%</div>
+    <div style="font-size:10px;color:#9CA3AF;margin-top:2px;">매수 후 고점 평균</div>
   </div>
-  <div style="background:#FAFAFA;border-radius:6px;padding:8px 12px;text-align:center;">
-    <div style="font-size:10px;color:#6B7280;">슈퍼위너 도달</div>
-    <div style="font-size:18px;font-weight:800;color:#B91C1C;">{sw_n}건</div>
+  <div style="background:{prof_col};color:white;border-radius:8px;padding:12px 16px;">
+    <div style="font-size:10px;opacity:0.85;letter-spacing:1px;">총 수익금 (10만원/종목)</div>
+    <div style="font-size:22px;font-weight:800;margin-top:2px;">{total_profit:+,.0f}<span style="font-size:13px;font-weight:600;opacity:0.95;"> 만</span></div>
+    <div style="font-size:10px;opacity:0.9;margin-top:2px;">투자 대비 {total_profit/max(invest_amount,1)*100:+.1f}%</div>
   </div>
-  <div style="background:#FAFAFA;border-radius:6px;padding:8px 12px;text-align:center;">
-    <div style="font-size:10px;color:#6B7280;">100%+ 도달</div>
-    <div style="font-size:18px;font-weight:800;color:#DC2626;">{p100_n}건</div>
+</div>
+""", unsafe_allow_html=True)
+
+        # Row 2: 매도 실현 기준 단계별 도달 (5개) + 손절
+        st.markdown(f"""
+<div style="margin-top:8px;background:white;border:1px solid #E5E7EB;border-radius:8px;padding:10px 14px;">
+  <div style="font-size:11px;color:#6B7280;font-weight:700;letter-spacing:1px;margin-bottom:6px;">
+    매도(180일 종가) 실현 단계별 도달 — 실현 수익 기준
   </div>
-  <div style="background:#FAFAFA;border-radius:6px;padding:8px 12px;text-align:center;">
-    <div style="font-size:10px;color:#6B7280;">총 수익금 (10만원/종목)</div>
-    <div style="font-size:18px;font-weight:800;color:{'#DC2626' if total_profit>0 else '#2563EB'};">{total_profit:+,.0f}만</div>
+  <div style="display:grid;grid-template-columns:repeat(5,1fr) 1fr;gap:6px;text-align:center;">
+    <div style="padding:6px;background:#FEE2E2;border-radius:6px;">
+      <div style="font-size:10px;color:#7F1D1D;font-weight:700;">슈퍼위너 200%+</div>
+      <div style="font-size:18px;font-weight:900;color:#7F1D1D;">{sw_n}<span style="font-size:11px;color:#6B7280;font-weight:600;">건 · {pct(sw_n)}</span></div>
+      <div style="font-size:9px;color:#9CA3AF;">고점 {sw_peak}건 도달</div>
+    </div>
+    <div style="padding:6px;background:#FECACA;border-radius:6px;">
+      <div style="font-size:10px;color:#B91C1C;font-weight:700;">100%+ (2배)</div>
+      <div style="font-size:18px;font-weight:900;color:#B91C1C;">{p100_n}<span style="font-size:11px;color:#6B7280;font-weight:600;">건 · {pct(p100_n)}</span></div>
+      <div style="font-size:9px;color:#9CA3AF;">고점 {p100_peak}건 도달</div>
+    </div>
+    <div style="padding:6px;background:#FECACA;border-radius:6px;">
+      <div style="font-size:10px;color:#DC2626;font-weight:700;">50%+</div>
+      <div style="font-size:18px;font-weight:900;color:#DC2626;">{p50_n}<span style="font-size:11px;color:#6B7280;font-weight:600;">건 · {pct(p50_n)}</span></div>
+      <div style="font-size:9px;color:#9CA3AF;">고점 {p50_peak}건 도달</div>
+    </div>
+    <div style="padding:6px;background:#FEE2E2;border-radius:6px;">
+      <div style="font-size:10px;color:#EF4444;font-weight:700;">10%+</div>
+      <div style="font-size:18px;font-weight:900;color:#EF4444;">{p10_n}<span style="font-size:11px;color:#6B7280;font-weight:600;">건 · {pct(p10_n)}</span></div>
+      <div style="font-size:9px;color:#9CA3AF;">의미있는 익절</div>
+    </div>
+    <div style="padding:6px;background:#FEF2F2;border-radius:6px;">
+      <div style="font-size:10px;color:#F87171;font-weight:700;">소폭+ (0~10%)</div>
+      <div style="font-size:18px;font-weight:900;color:#F87171;">{win_n - p10_n}<span style="font-size:11px;color:#6B7280;font-weight:600;">건 · {pct(win_n - p10_n)}</span></div>
+      <div style="font-size:9px;color:#9CA3AF;">소익절</div>
+    </div>
+    <div style="padding:6px;background:#DBEAFE;border-radius:6px;">
+      <div style="font-size:10px;color:#1D4ED8;font-weight:700;">손절 -20%↓</div>
+      <div style="font-size:18px;font-weight:900;color:#1D4ED8;">{loss_n}<span style="font-size:11px;color:#6B7280;font-weight:600;">건 · {pct(loss_n)}</span></div>
+      <div style="font-size:9px;color:#9CA3AF;">실패율</div>
+    </div>
   </div>
 </div>
 """, unsafe_allow_html=True)
