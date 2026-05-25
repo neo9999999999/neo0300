@@ -192,16 +192,15 @@ def _peak_color(v):
 
 
 def _ret_color(v):
-    """한국식: + 상승 빨강, - 하락 파랑"""
+    """한국식: + 상승 빨강, - 하락 파랑. -5~+5% 보합(회색)"""
     if pd.isna(v): return "#9CA3AF"
     if v >= 100:  return "#7F1D1D"   # 진빨강 (대박)
     if v >= 30:   return "#B91C1C"   # 진빨강
-    if v >= 5:    return "#DC2626"   # 빨강
-    if v > 0:     return "#EF4444"   # 연빨강
-    if v == 0:    return "#6B7280"   # 보합 (드묾)
-    if v > -5:    return "#3B82F6"   # 연파랑
+    if v >= 10:   return "#DC2626"   # 빨강
+    if v >= 5:    return "#EF4444"   # 연빨강 (소폭익절)
+    if v > -5:    return "#6B7280"   # 보합 (회색)
     if v > -20:   return "#2563EB"   # 파랑
-    return "#1D4ED8"                  # 진파랑 (손절)
+    return "#1D4ED8"                  # 진파랑 (손절 -20%↓)
 
 
 def _peak_label_plain(v):
@@ -992,18 +991,18 @@ def page_backtest():
         "단기 폭등 종목이 추출된 건 모델이 의도한 슈퍼위너 발굴 효과."
     )
 
-    # 결과 분류 = 실제 매도가 수익률(ret_180d) 기준 (현실적인 실현 수익)
-    # 최고가도달(peak)은 별도 컬럼으로 참고만
+    # 결과 분류 = 실제 매도가 수익률(ret_180d) 기준
+    # 손절: -5% 이하 / 보합: -5% < r < 5% / 소폭익절: 5~10% / 그 이상 등급별
     def cls(row):
         r = row.get("ret_180d")
         if pd.isna(r): return "미정"
-        if r >= 200: return "슈퍼위너"   # 실제 +200% 이상 익절
-        if r >= 100: return "100%+"     # 2배
+        if r >= 200: return "슈퍼위너"
+        if r >= 100: return "100%+"
         if r >= 50:  return "50%+"
         if r >= 10:  return "10%+"
-        if r <= -20: return "손절"
-        if r > 0:    return "소폭익절"   # 0~10% 미세 익절
-        return "보합"                    # 0%~-20% 미세 손실
+        if r >= 5:   return "소폭익절"   # +5 ~ +10%
+        if r > -5:   return "보합"        # -5% < r < +5%
+        return "손절"                     # -5% 이하
     picks["결과"] = picks.apply(cls, axis=1)
 
     # === 종목당 매수 금액 입력 (만원) — 단일 session_state 키로 통합 ===
@@ -1104,7 +1103,7 @@ def page_backtest():
         p50_n  = int((filtered["ret_180d"]>=50).sum())
         p10_n  = int((filtered["ret_180d"]>=10).sum())
         win_n  = int((filtered["ret_180d"]>0).sum())
-        loss_n = int((filtered["ret_180d"]<=-20).sum())
+        loss_n = int((filtered["ret_180d"]<=-5).sum())
         sw_peak = int((filtered["peak_180d"]>=200).sum())
         p100_peak = int((filtered["peak_180d"]>=100).sum())
         p50_peak = int((filtered["peak_180d"]>=50).sum())
@@ -1167,12 +1166,12 @@ def page_backtest():
       <div style="font-size:9px;color:#9CA3AF;">의미있는 익절</div>
     </div>
     <div style="padding:6px;background:#FEF2F2;border-radius:6px;">
-      <div style="font-size:10px;color:#F87171;font-weight:700;">소폭+ (0~10%)</div>
+      <div style="font-size:10px;color:#F87171;font-weight:700;">소폭+ (5~10%)</div>
       <div style="font-size:18px;font-weight:900;color:#F87171;">{win_n - p10_n}<span style="font-size:11px;color:#6B7280;font-weight:600;">건 · {pct(win_n - p10_n)}</span></div>
       <div style="font-size:9px;color:#9CA3AF;">소익절</div>
     </div>
     <div style="padding:6px;background:#DBEAFE;border-radius:6px;">
-      <div style="font-size:10px;color:#1D4ED8;font-weight:700;">손절 -20%↓</div>
+      <div style="font-size:10px;color:#1D4ED8;font-weight:700;">손절 -5%↓</div>
       <div style="font-size:18px;font-weight:900;color:#1D4ED8;">{loss_n}<span style="font-size:11px;color:#6B7280;font-weight:600;">건 · {pct(loss_n)}</span></div>
       <div style="font-size:9px;color:#9CA3AF;">실패율</div>
     </div>
@@ -1232,13 +1231,14 @@ def page_backtest():
         return ""
 
     def _return_style(val):
+        """한국식: + 빨강 / - 파랑.  -5%~+5% 보합(회색)"""
         try:
             v = float(val)
             if v >= 100:  return "color:#7F1D1D;font-weight:800;"
             if v >= 30:   return "color:#B91C1C;font-weight:700;"
             if v >= 10:   return "color:#DC2626;font-weight:700;"
-            if v > 0:     return "color:#EF4444;"
-            if v == 0:    return "color:#6B7280;"
+            if v >= 5:    return "color:#EF4444;"
+            if v > -5:    return "color:#6B7280;"
             if v > -20:   return "color:#2563EB;font-weight:600;"
             return "color:#1D4ED8;font-weight:800;"
         except Exception: return ""
@@ -1344,7 +1344,7 @@ def page_buy_rule():
       · <b>슈퍼점수 상위 30%</b> (per pool)<br>
       · 일평균 <b>2~3건</b> 발생<br>
       · <b>200%+ 매도 27.7%</b> · 100%+ 매도 47.0%<br>
-      · 손절률 <b>8.9%</b> · 승률 <b>81.6%</b><br>
+      · 손절률(-5%↓) <b>15.9%</b> · 승률 <b>81.6%</b><br>
       · 평균 수익률 <b style="color:#B91C1C;">+151%</b><br>
       · 자본 부족해도 <b>필수 매수</b>
     </div>
@@ -1359,7 +1359,7 @@ def page_buy_rule():
       · <b>슈퍼점수 하위 70%</b> (per pool)<br>
       · 일평균 <b>3~5건</b> 발생<br>
       · <b>200%+ 매도 14.2%</b> · 100%+ 매도 27.6%<br>
-      · 손절률 <b>18.7%</b> · 승률 <b>63.9%</b><br>
+      · 손절률(-5%↓) <b>32.2%</b> · 승률 <b>63.9%</b><br>
       · 평균 수익률 <b style="color:#F97316;">+96%</b><br>
       · 자본 여유 시 <b>보완 매수</b>
     </div>
@@ -1403,7 +1403,7 @@ def page_buy_rule():
         {"항목": "50%+ 매도",        "슈퍼강력매수": "66.6%",     "추천매수": "42.5%"},
         {"항목": "10%+ 매도",        "슈퍼강력매수": "76.1%",     "추천매수": "59.2%"},
         {"항목": "승률 (익절)",       "슈퍼강력매수": "81.6%",     "추천매수": "63.9%"},
-        {"항목": "손절률 -20%↓",      "슈퍼강력매수": "8.9%",      "추천매수": "18.7%"},
+        {"항목": "손절률 -5%↓",       "슈퍼강력매수": "15.9%",     "추천매수": "32.2%"},
         {"항목": "평균 수익률",       "슈퍼강력매수": "+151.1%",   "추천매수": "+95.7%"},
         {"항목": "총 실현 수익 (10만/종목)", "슈퍼강력매수": "+5,242만", "추천매수": "+7,733만"},
         {"항목": "5년 수익률 (등급 한정)",   "슈퍼강력매수": "+151.1%", "추천매수": "+95.7%"},
