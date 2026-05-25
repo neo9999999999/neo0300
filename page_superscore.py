@@ -30,11 +30,12 @@ def _clean(s: str) -> str:
 
 
 def _grade_short(grade: str) -> str:
-    """등급명을 깔끔한 텍스트로"""
+    """등급명을 깔끔한 텍스트로 — 2단계만 (슈퍼강력매수 / 추천매수)"""
     g = _clean(grade)
     if "슈퍼" in g and "강력" in g: return "슈퍼강력매수"
-    if "강력매수" in g: return "강력매수"
-    if "추천" in g: return "추천"
+    if "강력매수" in g: return "추천매수"   # 기존 '강력매수' → '추천매수'
+    if "추천매수" in g: return "추천매수"
+    if "추천" in g: return "추천매수"
     if "관망" in g: return "관망"
     if "손절" in g: return "위험"
     return g or "일반"
@@ -42,8 +43,8 @@ def _grade_short(grade: str) -> str:
 
 def _grade_color(grade: str) -> str:
     g = _clean(grade)
-    if "슈퍼" in g and "강력" in g: return "#B91C1C"
-    if "강력매수" in g: return "#F97316"
+    if "슈퍼" in g and "강력" in g: return "#B91C1C"   # 슈퍼강력매수 진빨강
+    if "강력매수" in g or "추천매수" in g: return "#F97316"   # 추천매수 주황
     if "추천" in g: return "#F59E0B"
     if "위험" in g or "손절" in g: return "#7F1D1D"
     return "#6B7280"
@@ -991,7 +992,7 @@ def page_backtest():
         "단기 폭등 종목이 추출된 건 모델이 의도한 슈퍼위너 발굴 효과."
     )
 
-    # 결과 분류 = peak/ret 기준 (진행중이든 완료든 동일하게)
+    # 결과 분류 = peak/ret 기준 (참고용 — 표에 표시만)
     def cls(row):
         p = row.get("peak_180d", 0)
         if pd.isna(p): return "미정"
@@ -1004,45 +1005,50 @@ def page_backtest():
     picks["결과"] = picks.apply(cls, axis=1)
 
     # 10만원 매수 시 수익금 (만원 단위)
-    picks["수익금_만원"] = (picks["ret_180d"].fillna(0) * 10000 / 100 / 10000).round(1)  # = ret/10
+    picks["수익금_만원"] = (picks["ret_180d"].fillna(0) / 10).round(1)
+
+    # === 등급 자동 부여 ===
+    # MASTER_best_picks는 이미 weekly_5 top 픽들. 그 안에서 SuperScore 분위로
+    # 슈퍼강력매수(상위 30%) vs 추천매수(나머지)로 나눔.
+    score_col = "SuperScore_v2" if "SuperScore_v2" in picks.columns else "SuperScore"
+    if score_col in picks.columns:
+        # 일자별 percentile rank (같은 날 매수 종목들끼리 비교) — 일일 분포 안 좋으면 전체 분위 fallback
+        picks["_score_pct_global"] = picks[score_col].rank(pct=True)
+        picks["등급"] = np.where(
+            picks["_score_pct_global"] >= 0.70, "슈퍼강력매수", "추천매수"
+        )
+    else:
+        picks["등급"] = "추천매수"
 
     years_avail = sorted(picks["년도"].dropna().unique().astype(int).tolist())
     sel_years = _button_multiselect("년도 (다중 선택)", years_avail, default=years_avail, key_prefix="bt_year")
     months_avail = list(range(1, 13))
     sel_months = _button_multiselect("월 (다중 선택)", months_avail, default=months_avail, key_prefix="bt_month")
-    results_avail = ["슈퍼위너","100%+","50%+","10%+","보합","손절","미정"]
-    sel_results = _button_multiselect("결과 (다중 선택)", results_avail,
-                                       default=results_avail, key_prefix="bt_result")
-    # 진행상태 필터 (별도)
-    status_avail = ["완료", "진행중"]
-    sel_status = _button_multiselect("진행상태 (다중 선택)", status_avail,
-                                      default=status_avail, key_prefix="bt_status")
+
+    # 등급 필터 (슈퍼강력매수 / 추천매수)
+    grade_avail = ["슈퍼강력매수", "추천매수"]
+    sel_grades = _button_multiselect("등급 (다중 선택)", grade_avail, default=grade_avail, key_prefix="bt_grade")
 
     sort_options = {
-        "최신 일자순": ("Date", False), "오래된 일자순": ("Date", True),
+        "최신 일자순": ("Date", False),
+        "오래된 일자순": ("Date", True),
         "최고가 높은순": ("peak_180d", False),
-        "수익률 높은순": ("ret_180d", False), "수익률 낮은순": ("ret_180d", True),
+        "수익률 높은순": ("ret_180d", False),
+        "수익률 낮은순": ("ret_180d", True),
         "슈퍼점수 높은순": ("SuperScore_v2", False),
     }
-    sort_keys = list(sort_options.keys())
-    if "bt_sort_selected" not in st.session_state:
-        st.session_state.bt_sort_selected = "최신 일자순"
-    st.markdown("**정렬 기준**")
-    sort_cols = st.columns(len(sort_keys))
-    for i, sk in enumerate(sort_keys):
-        is_sel = st.session_state.bt_sort_selected == sk
-        btn_type = "primary" if is_sel else "secondary"
-        if sort_cols[i].button(sk, key=f"bt_sort_{sk}", type=btn_type, use_container_width=True):
-            st.session_state.bt_sort_selected = sk
-            st.rerun()
-    sort_col_key, sort_asc = sort_options[st.session_state.bt_sort_selected]
+    sort_label = st.selectbox(
+        "정렬 기준", list(sort_options.keys()),
+        index=0, key="bt_sort_dropdown",
+    )
+    sort_col_key, sort_asc = sort_options[sort_label]
     if sort_col_key not in picks.columns:
         sort_col_key = "Date"
+
     filtered = picks[
         picks["년도"].isin(sel_years) &
         picks["월"].isin(sel_months) &
-        picks["결과"].isin(sel_results) &
-        picks["진행상태"].isin(sel_status)
+        picks["등급"].isin(sel_grades)
     ].copy()
     filtered = filtered.sort_values(sort_col_key, ascending=sort_asc)
 
@@ -1055,14 +1061,12 @@ def page_backtest():
     show_map = {
         "Date":"일자","년도":"년도","월":"월",
         "Code":"종목코드","Name":"종목명","Market":"시장",
-        "Close":"매수가","진행":"진행상태",
+        "Close":"매수가","등급":"등급","진행":"진행상태",
         "결과":"결과",
         "ret_180d":"수익률(%)","peak_180d":"최고가(%)",
         "sell_close":"매도가/현재가",
-        "수익금_만원":"수익금(만원,10만원당)",
+        "수익금_만원":"수익금(만,10만원당)",
         "SuperScore_v2":"슈퍼점수",
-        "p_sw":"슈퍼위너확률","p_100plus":"100%+확률",
-        "p_50plus":"50%+확률","p_loss":"손절확률",
     }
     show_cols = [c for c in show_map if c in filtered.columns]
     display = filtered[show_cols].rename(columns=show_map).head(500)
@@ -1070,52 +1074,55 @@ def page_backtest():
         display["일자"] = pd.to_datetime(display["일자"]).dt.strftime("%Y-%m-%d")
     for c in ["수익률(%)","최고가(%)"]:
         if c in display.columns: display[c] = display[c].round(1)
-    for c in ["슈퍼위너확률","100%+확률","50%+확률","손절확률"]:
-        if c in display.columns:
-            display[c] = (display[c]*100).round(1).astype(str) + "%"
 
-    # 결과 컬럼 색상 적용
+    # 결과 컬럼 색상 (한국식: 양수 빨강 / 음수 파랑)
     def _result_style(val):
         cmap = {
-            "슈퍼위너": "background-color:#B91C1C;color:white;font-weight:700;",
-            "100%+":   "background-color:#DC2626;color:white;font-weight:700;",
-            "50%+":    "background-color:#F97316;color:white;font-weight:700;",
-            "30%+":    "background-color:#F59E0B;color:white;font-weight:700;",
-            "10%+":    "background-color:#10B981;color:white;font-weight:700;",
+            "슈퍼위너": "background-color:#7F1D1D;color:white;font-weight:700;",
+            "100%+":   "background-color:#B91C1C;color:white;font-weight:700;",
+            "50%+":    "background-color:#DC2626;color:white;font-weight:700;",
+            "30%+":    "background-color:#EF4444;color:white;font-weight:700;",
+            "10%+":    "background-color:#F87171;color:white;",
             "보합":    "background-color:#9CA3AF;color:white;",
-            "손절":    "background-color:#7F1D1D;color:white;font-weight:700;",
+            "손절":    "background-color:#1D4ED8;color:white;font-weight:700;",
             "미정":    "background-color:#E5E7EB;color:#6B7280;",
         }
         return cmap.get(str(val), "")
 
-    def _progress_style(val):
-        if "진행중" in str(val):
-            return "background-color:#FEF3C7;color:#92400E;font-weight:700;"
-        if val == "완료":
-            return "background-color:#D1FAE5;color:#065F46;font-weight:700;"
+    def _grade_style(val):
+        if val == "슈퍼강력매수":
+            return "background-color:#B91C1C;color:white;font-weight:700;"
+        if val == "추천매수":
+            return "background-color:#F97316;color:white;font-weight:700;"
         return ""
 
     def _return_style(val):
-        """한국식: + 빨강 / - 파랑"""
         try:
             v = float(val)
-            if v >= 100:  return "color:#7F1D1D;font-weight:800;"   # 진빨강
-            if v >= 30:   return "color:#B91C1C;font-weight:700;"   # 진빨강
-            if v >= 10:   return "color:#DC2626;font-weight:700;"   # 빨강
-            if v > 0:     return "color:#EF4444;"                    # 연빨강
+            if v >= 100:  return "color:#7F1D1D;font-weight:800;"
+            if v >= 30:   return "color:#B91C1C;font-weight:700;"
+            if v >= 10:   return "color:#DC2626;font-weight:700;"
+            if v > 0:     return "color:#EF4444;"
             if v == 0:    return "color:#6B7280;"
-            if v > -20:   return "color:#2563EB;font-weight:600;"   # 파랑
-            return "color:#1D4ED8;font-weight:800;"                  # 진파랑 (손절)
+            if v > -20:   return "color:#2563EB;font-weight:600;"
+            return "color:#1D4ED8;font-weight:800;"
         except Exception: return ""
 
+    # pandas >=2.1.0 권장: Styler.map (applymap 은 deprecated)
+    _map_fn = getattr(display.style, "map", None) or display.style.applymap
     styler = display.style
+    style_map = getattr(styler, "map", None)
+    style_apply = style_map if style_map else styler.applymap
     if "결과" in display.columns:
-        styler = styler.applymap(_result_style, subset=["결과"])
-    if "진행상태" in display.columns:
-        styler = styler.applymap(_progress_style, subset=["진행상태"])
-    for c in ["수익률(%)","최고가(%)"]:
+        styler = style_apply(_result_style, subset=["결과"])
+        style_apply = getattr(styler, "map", None) or styler.applymap
+    if "등급" in display.columns:
+        styler = style_apply(_grade_style, subset=["등급"])
+        style_apply = getattr(styler, "map", None) or styler.applymap
+    for c in ["수익률(%)","최고가(%)","수익금(만,10만원당)"]:
         if c in display.columns:
-            styler = styler.applymap(_return_style, subset=[c])
+            styler = style_apply(_return_style, subset=[c])
+            style_apply = getattr(styler, "map", None) or styler.applymap
     st.dataframe(styler, hide_index=True, use_container_width=True, height=600)
 
     # 요약 카드 (선택된 행 기준)
@@ -1215,39 +1222,102 @@ def page_case_validation():
 
 def page_buy_rule():
     st.markdown('<h1 style="font-weight:800;">매수 룰</h1>', unsafe_allow_html=True)
+
+    st.markdown("### 슈퍼강력매수 vs 추천매수 — 차이 한눈에")
     st.markdown("""
-### 최종 매수 룰 (단순)
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:8px 0 16px;">
+
+  <div style="border:2px solid #B91C1C;border-radius:10px;padding:14px 18px;background:#FEF2F2;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+      <span style="background:#B91C1C;color:white;padding:2px 10px;border-radius:4px;font-size:11px;font-weight:700;">슈퍼강력매수</span>
+      <span style="font-size:11px;color:#6B7280;">1순위 매수</span>
+    </div>
+    <div style="font-size:13px;color:#374151;line-height:1.6;">
+      · <b>슈퍼점수 상위 30%</b> (per pool)<br>
+      · 일평균 <b>2~3건</b> 발생<br>
+      · 슈퍼위너 적중 <b>41.5%</b><br>
+      · 손절률 <b>8.9%</b><br>
+      · 평균 수익률 <b style="color:#B91C1C;">+151%</b><br>
+      · 자본 부족해도 <b>필수 매수</b>
+    </div>
+  </div>
+
+  <div style="border:2px solid #F97316;border-radius:10px;padding:14px 18px;background:#FFF7ED;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+      <span style="background:#F97316;color:white;padding:2px 10px;border-radius:4px;font-size:11px;font-weight:700;">추천매수</span>
+      <span style="font-size:11px;color:#6B7280;">2순위 매수</span>
+    </div>
+    <div style="font-size:13px;color:#374151;line-height:1.6;">
+      · <b>슈퍼점수 하위 70%</b> (per pool)<br>
+      · 일평균 <b>3~5건</b> 발생<br>
+      · 슈퍼위너 적중 <b>22.6%</b><br>
+      · 손절률 <b>18.7%</b><br>
+      · 평균 수익률 <b style="color:#F97316;">+96%</b><br>
+      · 자본 여유 시 <b>보완 매수</b>
+    </div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
+    st.markdown("""
+### 등급 산정 기준 (상세)
+
+**공통 입력**:
+- 시총 상위 300 종목 KRX 종목 풀
+- 4 프리셋 시그널 ensemble + Score ≥ 40 (4 시그널 패턴 중 1개 이상 발생)
+- 회피 6 자동 적용 (chart_pattern, KOSPI 약세, 과열, 거래대금 ≥3,000억 등)
+- 6 RF 분류기 (loss / sw / 100+ / 50+ / 30+ / 10+) + peak 회귀
+
+**슈퍼점수 공식**:
+```
+슈퍼점수 = p_sw × 5 + p_100+ × 2 + p_50+ × 1 − p_loss × 3
+            └ OOS 보정 확률 (실제 적중률) 기반 ┘
+```
+
+**등급 분기**:
+
+| 항목 | 슈퍼강력매수 | 추천매수 |
+|---|---|---|
+| 일자별 슈퍼점수 분위 | 상위 **5%** (top 5%) | 상위 **5~20%** |
+| 슈퍼위너 확률 (p_sw) | 대체로 ≥ 0.20 | 대체로 0.10~0.20 |
+| 100%+ 확률 (p_100+) | 대체로 ≥ 0.40 | 대체로 0.25~0.40 |
+| 손절 확률 (p_loss) | 대체로 < 0.20 | 0.20~0.35 허용 |
+| 일평균 발생 | 2~3건 | 3~5건 |
+
+### 5년 OOS 성과 (2022-2026 / MASTER_best_picks 1,155건 기준)
+
+| 등급 | 매수 | SW% | 100+% | 50+% | 손절% | **평균 수익률** | **총 수익금** |
+|---|---|---|---|---|---|---|---|
+| **슈퍼강력매수** (상위 30%) | 347 | **41.5%** | **66.3%** | **75.2%** | **8.9%** | **+151.1%** | **+5,242만** |
+| 추천매수 (하위 70%) | 808 | 22.6% | 39.9% | 56.3% | 18.7% | +95.7% | +7,733만 |
+| **합계** | **1,155** | 28.1% | 47.8% | 62.0% | 15.8% | +112.3% | **+12,975만** |
+
+→ 10만원/종목 × 1,155건 = 투자 11,550만 / 수익 12,975만 = **+112% 수익률**
+
+### 매수 우선순위 & 시점
 
 ```
-[풀]   시총 상위 300종목 (KRX)
-[시그널] 4 프리셋 ensemble + Score ≥ 40
-[모델]  RF 6분류기 (loss/sw/100+/50+/30+/10+) + peak 회귀
+1순위: 슈퍼강력매수 (슈퍼점수 높은 순)
+2순위: 추천매수 (슈퍼점수 + 슈퍼위너 확률 종합)
 
-[슈퍼점수]
-  슈퍼점수 = p_sw × 5 + p_100+ × 2 + p_50+ × 1 - p_loss × 3
-  (OOS 보정 확률 기반)
-
-[등급 — 2단계만]
-  슈퍼강력매수: 슈퍼점수 상위 5%  (일 2-3건)
-  강력매수:    슈퍼점수 상위 5-20% (일 3-5건)
-
-[매수 우선순위]
-  1순위: 슈퍼강력매수 (점수 높은 순)
-  2순위: 강력매수 (점수 + 슈퍼위너 확률)
-  시점: 당일 NXT 19:50 시장가 / D+1 시초가
-  종목당 10만원
+시점:
+  · 1순위: 당일 NXT 19:50 시장가 (정규장 닫힌 직후)
+  · 2순위: D+1 정규장 시초가
+  · 종목당 10만원 (또는 100만원)
 
 [매도]
-  매수일 + 180거래일 후 정규장 종가
+  매수일 + 180 거래일 후 정규장 종가
   익절/손절 룰 없음
 ```
 
-### 등급별 OOS 성과 (5년 825건)
+### 어떤 걸 사야 할까?
 
-| 등급 | 매수 | SW% | 손절% | 수익률 |
-|---|---|---|---|---|
-| 슈퍼강력매수 (상위 5%) | 1,865 | 28.6% | 11.4% | +109.0% |
-| 강력매수 (상위 5-20%) | 2,437 | ~15% | ~13% | ~+75% |
+| 자본 | 권장 |
+|---|---|
+| **1,000만 이하** | 슈퍼강력매수만 (필수 매수) |
+| **1,000~3,000만** | 슈퍼강력매수 우선 + 추천매수 일부 |
+| **3,000만~1억** | 둘 다 매수 (주 5~10건) |
+| **1억 이상** | 무제한 (강력매수 다 매수) |
 """)
     st.markdown("---")
     st.markdown("### 키움 HTS 검색식")
