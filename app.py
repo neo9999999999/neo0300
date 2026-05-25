@@ -66,9 +66,9 @@ def _check_password():
     st.markdown(
         '<style>'
         '.login-container { max-width: 400px; margin: 100px auto 40px; text-align: center; }'
-        '.login-logo { width: 64px; height: 64px; background: linear-gradient(135deg, #00C73C 0%, #03C75A 100%); '
+        '.login-logo { width: 64px; height: 64px; background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%); '
         '  border-radius: 18px; display: inline-flex; align-items: center; justify-content: center; '
-        '  box-shadow: 0 6px 20px rgba(3,199,90,0.25); margin-bottom: 20px; }'
+        '  box-shadow: 0 6px 20px rgba(220,38,38,0.25); margin-bottom: 20px; }'
         '.login-logo span { color: #FFFFFF; font-weight: 900; font-size: 32px; letter-spacing: -1.5px; }'
         '@media (max-width: 480px) { .login-container { margin-top: 60px; padding: 0 20px; } }'
         '</style>'
@@ -2347,7 +2347,7 @@ def _render_vs_table_rows(df_show: pd.DataFrame, ret_col: str, ret_label: str):
             grade_bg = "linear-gradient(135deg,#FFD700 0%,#FFA500 100%)"
             grade_emoji = "🏆"
         else:
-            grade_bg = "linear-gradient(135deg,#03C75A 0%,#00C73C 100%)"
+            grade_bg = "linear-gradient(135deg,#EF4444 0%,#DC2626 100%)"
             grade_emoji = "💎"
 
         ret_val = r.get(ret_col)
@@ -3631,11 +3631,11 @@ def page_library():
                     grade_bg = "linear-gradient(135deg,#FFD700 0%,#FFA500 100%)"
                     grade_html = f'<span style="background:{grade_bg};color:#FFFFFF;padding:3px 8px;border-radius:8px;font-size:11px;font-weight:800;">🏆 V</span>'
                 elif g == "S":
-                    grade_html = '<span style="background:linear-gradient(135deg,#03C75A 0%,#00C73C 100%);color:#FFFFFF;padding:3px 8px;border-radius:8px;font-size:11px;font-weight:800;">💎 S</span>'
+                    grade_html = '<span style="background:linear-gradient(135deg,#EF4444 0%,#DC2626 100%);color:#FFFFFF;padding:3px 8px;border-radius:8px;font-size:11px;font-weight:800;">💎 S</span>'
                 elif g == "A":
                     grade_html = '<span style="background:#FF73B8;color:#FFFFFF;padding:3px 8px;border-radius:8px;font-size:11px;font-weight:800;">⭐ A</span>'
                 elif g == "B":
-                    grade_html = '<span style="background:#03C75A;color:#FFFFFF;padding:3px 8px;border-radius:8px;font-size:11px;font-weight:800;">🟢 B</span>'
+                    grade_html = '<span style="background:#DC2626;color:#FFFFFF;padding:3px 8px;border-radius:8px;font-size:11px;font-weight:800;">🟢 B</span>'
                 else:
                     grade_html = '<span style="background:var(--surface-alt);color:var(--text-3);padding:3px 8px;border-radius:8px;font-size:11px;font-weight:700;">⚪ —</span>'
 

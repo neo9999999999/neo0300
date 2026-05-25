@@ -137,6 +137,16 @@ def get_css(mode: str = "light") -> str:
     font-family: 'Pretendard', 'Pretendard Variable', -apple-system, BlinkMacSystemFont,
                  'Apple SD Gothic Neo', 'Noto Sans KR', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
+    /* 모바일 탭 시 디폴트 그린/블루 하이라이트 제거 → 빨강 톤 살짝 */
+    -webkit-tap-highlight-color: rgba(220,38,38,0.10);
+}}
+button, a, [role="button"], [data-baseweb="button"], [data-testid^="stBaseButton"] {{
+    -webkit-tap-highlight-color: rgba(220,38,38,0.12) !important;
+}}
+button:focus, button:active,
+[data-testid^="stBaseButton"]:focus,
+[data-testid^="stBaseButton"]:active {{
+    outline-color: var(--accent) !important;
 }}
 
 .block-container {{
