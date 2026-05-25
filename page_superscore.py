@@ -274,6 +274,30 @@ def _render_weekly_by_day(picks_list, week_limit=5):
         st.markdown("---")
 
 
+def _weekly_limit_selector(key_prefix: str) -> int:
+    """주 매수 한도 선택 버튼"""
+    options = {
+        "무제한 (★ 모두 매수)": 999,
+        "10건/주": 10,
+        "7건/주": 7,
+        "5건/주": 5,
+        "3건/주": 3,
+    }
+    if f"{key_prefix}_limit" not in st.session_state:
+        st.session_state[f"{key_prefix}_limit"] = "무제한 (★ 모두 매수)"
+
+    st.markdown("**주 매수 한도** (자본에 맞춰 선택)")
+    cols = st.columns(len(options))
+    for i, label in enumerate(options.keys()):
+        is_sel = st.session_state[f"{key_prefix}_limit"] == label
+        btn_type = "primary" if is_sel else "secondary"
+        if cols[i].button(label, key=f"{key_prefix}_lim_{label}",
+                           type=btn_type, use_container_width=True):
+            st.session_state[f"{key_prefix}_limit"] = label
+            st.rerun()
+    return options[st.session_state[f"{key_prefix}_limit"]]
+
+
 def page_this_week():
     """📅 이번 주 추천"""
     st.markdown('<h1>📅 이번 주 추천</h1>', unsafe_allow_html=True)
@@ -281,8 +305,9 @@ def page_this_week():
     week = data.get("week", {})
 
     st.markdown(f"#### 주 시작일: {data.get('week_start', '')}")
-    st.caption("일자별 정리 · 슈퍼점수 TOP 5만 실제 매수 (주 한도)")
-    _render_weekly_by_day(week.get("picks", []), week_limit=5)
+    st.caption("⭐ 자본 충분하면 무제한(★ 모두 매수) 추천 · 자본 적으면 한도 설정")
+    limit = _weekly_limit_selector("week")
+    _render_weekly_by_day(week.get("picks", []), week_limit=limit)
 
 
 def page_last_week():
@@ -290,8 +315,9 @@ def page_last_week():
     st.markdown('<h1>🗓️ 지난 주 추천</h1>', unsafe_allow_html=True)
     data = _load_json()
     last_week = data.get("last_week", {})
-    st.caption("일자별 정리 · 슈퍼점수 TOP 5만 실제 매수")
-    _render_weekly_by_day(last_week.get("picks", []), week_limit=5)
+    st.caption("⭐ 자본 충분하면 무제한(★ 모두 매수) · 한도 자유 선택")
+    limit = _weekly_limit_selector("lw")
+    _render_weekly_by_day(last_week.get("picks", []), week_limit=limit)
 
 
 def page_backtest():
