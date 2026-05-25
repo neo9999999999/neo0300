@@ -1192,13 +1192,13 @@ def page_backtest():
 
     st.markdown("")  # spacer
 
-    profit_col_label = f"수익금({buy_amount_man}만/종목,만원)"
+    profit_col_label = f"수익금({buy_amount_man}만/종목)"
     show_map = {
         "Date":"일자","년도":"년도","월":"월",
         "Code":"종목코드","Name":"종목명","Market":"시장",
         "Close":"매수가","등급":"등급","진행":"진행상태",
         "결과":"결과",
-        "ret_180d":"수익률(%)","peak_180d":"최고가(%)",
+        "ret_180d":"수익률","peak_180d":"최고가",
         "sell_close":"매도가/현재가",
         "수익금_만원":profit_col_label,
         "SuperScore_v2":"슈퍼점수",
@@ -1207,8 +1207,8 @@ def page_backtest():
     display = filtered[show_cols].rename(columns=show_map).head(500)
     if "일자" in display.columns:
         display["일자"] = pd.to_datetime(display["일자"]).dt.strftime("%Y-%m-%d")
-    for c in ["수익률(%)","최고가(%)"]:
-        if c in display.columns: display[c] = display[c].round(1)
+    for c in ["수익률","최고가"]:
+        if c in display.columns: display[c] = display[c].round(0)
 
     # 결과 컬럼 색상 (한국식: 양수 빨강 / 음수 파랑) — ret_180d 기준
     def _result_style(val):
@@ -1252,7 +1252,7 @@ def page_backtest():
     if "등급" in display.columns:
         styler = style_apply(_grade_style, subset=["등급"])
         style_apply = getattr(styler, "map", None) or styler.applymap
-    for c in ["수익률(%)","최고가(%)", profit_col_label]:
+    for c in ["수익률","최고가", profit_col_label]:
         if c in display.columns:
             styler = style_apply(_return_style, subset=[c])
             style_apply = getattr(styler, "map", None) or styler.applymap
@@ -1261,10 +1261,10 @@ def page_backtest():
     fmt_map = {}
     for c in ["매수가","매도가/현재가"]:
         if c in display.columns: fmt_map[c] = "{:,.0f}"   # 원 단위, 콤마, 소수 없음
-    for c in ["수익률(%)","최고가(%)"]:
-        if c in display.columns: fmt_map[c] = "{:+.1f}"   # 부호 포함, 소수 1자리
+    for c in ["수익률","최고가"]:
+        if c in display.columns: fmt_map[c] = "{:+.0f}%"   # 부호 + 소수점 없음 + % 단위
     if profit_col_label in display.columns:
-        fmt_map[profit_col_label] = "{:+,.1f}"        # 만원 단위 부호 + 콤마
+        fmt_map[profit_col_label] = "{:+,.0f}만원"       # 만원 단위 + 부호 + 콤마 + 소수 없음
     if "슈퍼점수" in display.columns:
         fmt_map["슈퍼점수"] = "{:.2f}"
     if fmt_map:
