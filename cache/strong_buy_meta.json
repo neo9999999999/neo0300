@@ -46,14 +46,7 @@
     "long_red_in_10d",
     "consecutive_red_max"
   ],
-  "n_samples": 205790,
-  "trained_at": "2026-05-24T20:59:24.322424",
-  "targets": [
-    "loss(≤-20%)",
-    "sw(≥200%)",
-    "100plus(≥100%)",
-    "50plus(≥50%)",
-    "peak_reg"
-  ],
-  "score_formula": "p_sw*3 + p_50plus*1 + p_100plus*1.5 - p_loss*2"
+  "n_samples": 38293,
+  "trained_at": "2026-05-25T12:49:00.218532",
+  "calibrated": true
 }
