@@ -82,6 +82,95 @@ def load_calibration_map():
         return json.load(f)
 
 
+def load_fundamentals_wide():
+    """연도별 wide 펀더 + YoY 성장률 + 성장등급"""
+    p = CACHE / "fundamentals_wide.parquet"
+    if not p.exists():
+        return None
+    df = pd.read_parquet(p)
+    df["Code"] = df["Code"].astype(str).str.zfill(6)
+    return df
+
+
+def attach_fundamentals(df):
+    """매수일 기준 직전 연도 결산 + YoY 성장률 + PER/PBR + 외인지분율"""
+    fund = load_fundamentals_wide()
+    if fund is None:
+        return df
+
+    df["Code"] = df["Code"].astype(str).str.zfill(6)
+    df_year = pd.to_datetime(df["Date"]).dt.year
+
+    # 매수 연도 기준 직전 결산 (y-1) vs 직전직전 (y-2)
+    out = {
+        "매출_2024": [], "매출_2025": [],
+        "영업이익_2024": [], "영업이익_2025": [],
+        "영업이익률_2024": [], "영업이익률_2025": [],
+        "PER_최신": [], "PBR_최신": [], "ROE_최신": [],
+        "매출_YoY": [], "영업이익_YoY": [], "영업이익률_변화": [],
+        "성장등급": [], "성장점수": [],
+    }
+    fund_idx = fund.set_index("Code")
+
+    for code, yr in zip(df["Code"], df_year):
+        if code not in fund_idx.index:
+            for k in out: out[k].append(np.nan if k!="성장등급" else "데이터X")
+            continue
+        s = fund_idx.loc[code]
+        if isinstance(s, pd.DataFrame): s = s.iloc[0]
+        y_prev = int(yr) - 1
+        y_2prev = int(yr) - 2
+        rev_p  = s.get(f"매출액_{y_prev}", np.nan)
+        rev_pp = s.get(f"매출액_{y_2prev}", np.nan)
+        op_p   = s.get(f"영업이익_{y_prev}", np.nan)
+        op_pp  = s.get(f"영업이익_{y_2prev}", np.nan)
+        om_p   = s.get(f"영업이익률_{y_prev}", np.nan)
+        om_pp  = s.get(f"영업이익률_{y_2prev}", np.nan)
+        per_p  = s.get(f"PER_{y_prev}", np.nan)
+        pbr_p  = s.get(f"PBR_{y_prev}", np.nan)
+        roe_p  = s.get(f"ROE_{y_prev}", np.nan)
+        out["매출_2024"].append(rev_pp)
+        out["매출_2025"].append(rev_p)
+        out["영업이익_2024"].append(op_pp)
+        out["영업이익_2025"].append(op_p)
+        out["영업이익률_2024"].append(om_pp)
+        out["영업이익률_2025"].append(om_p)
+        out["PER_최신"].append(per_p)
+        out["PBR_최신"].append(pbr_p)
+        out["ROE_최신"].append(roe_p)
+        rev_yoy = (rev_p - rev_pp) / abs(rev_pp) * 100 if pd.notna(rev_p) and pd.notna(rev_pp) and rev_pp != 0 else np.nan
+        op_yoy  = (op_p - op_pp)  / abs(op_pp)  * 100 if pd.notna(op_p)  and pd.notna(op_pp)  and op_pp  != 0 else np.nan
+        om_diff = om_p - om_pp if pd.notna(om_p) and pd.notna(om_pp) else np.nan
+        out["매출_YoY"].append(rev_yoy)
+        out["영업이익_YoY"].append(op_yoy)
+        out["영업이익률_변화"].append(om_diff)
+
+        # 종합 성장 점수
+        sc = 0
+        if pd.notna(rev_yoy):
+            if rev_yoy > 10: sc += 2
+            elif rev_yoy > 0: sc += 1
+            elif rev_yoy < -5: sc -= 1
+        if pd.notna(op_yoy):
+            if op_yoy > 20: sc += 2
+            elif op_yoy > 0: sc += 1
+            elif op_yoy < -10: sc -= 2
+        if pd.notna(om_diff):
+            if om_diff > 1: sc += 1
+            elif om_diff < -1: sc -= 1
+        if sc >= 4: grade = "🚀 폭발적 성장"
+        elif sc >= 2: grade = "📈 성장중"
+        elif sc >= 0: grade = "⚖️ 보합"
+        elif sc >= -2: grade = "📉 둔화"
+        else: grade = "❌ 역성장"
+        out["성장점수"].append(sc)
+        out["성장등급"].append(grade)
+
+    for k, v in out.items():
+        df[k] = v
+    return df
+
+
 def remap_prob(p_arr, mapping):
     """isotonic anchor 매핑으로 확률 remap"""
     xs = np.array(mapping["x"])
@@ -216,11 +305,14 @@ def compute_supabilities(df, sd, cur):
                     vals.append(np.nan)
             df[col] = vals
 
-    # 펀더멘털
+    # 펀더멘털 - 외인소진율(current snapshot)
     if cur is not None and not cur.empty:
         cur_idx = cur.set_index("Code")[["PER_num","PBR_num","외인소진율_num"]]
         for c in ["PER_num","PBR_num","외인소진율_num"]:
             df[c] = df["Code"].map(cur_idx[c])
+
+    # 연도별 재무 머지 (매출/영업이익/영업이익률 + YoY + 성장등급)
+    df = attach_fundamentals(df)
 
     # RF 예측 (4 분류기 + peak 회귀)
     features = sb["features"]
@@ -373,6 +465,11 @@ def build_picks(top_n_today=5, top_n_week=5):
             "SuperScore","StrongScore","예상peak%",
             "슈퍼위너확률%","100%+확률","50%+확률","30%+확률","10%+확률","손절확률%",
             "p_sw_cal","p_100plus_cal","p_50plus_cal","p_30plus_cal","p_10plus_cal","p_loss_cal",
+            # 펀더멘털
+            "매출_2024","매출_2025","영업이익_2024","영업이익_2025",
+            "영업이익률_2024","영업이익률_2025","매출_YoY","영업이익_YoY","영업이익률_변화",
+            "PER_최신","PBR_최신","ROE_최신","성장등급","성장점수",
+            "PER_num","PBR_num","외인소진율_num",
             "Score","chart_pattern","past_60","past_120","pos_252_high","slope60"]
 
     def save_picks(df, fname):

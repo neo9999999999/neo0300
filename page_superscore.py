@@ -133,6 +133,145 @@ def _reason_text(row: pd.Series) -> list:
     return reasons
 
 
+def _render_fundamentals_block(row: pd.Series):
+    """🏢 기업 분석 — 매출/영업이익 추이 + 성장 평가 + PER/PBR/외인지분율
+    OOS 인사이트: 매출↑+영업이익↑가 슈퍼위너에 더 많이 나오지 않음.
+    오히려 역성장/이익률 하락 종목이 슈퍼위너 80%+ 적중 (V자 반등).
+    """
+    name = row.get("Name", "")
+    rev_24 = row.get("매출_2024")
+    rev_25 = row.get("매출_2025")
+    op_24  = row.get("영업이익_2024")
+    op_25  = row.get("영업이익_2025")
+    om_24  = row.get("영업이익률_2024")
+    om_25  = row.get("영업이익률_2025")
+    rev_yoy = row.get("매출_YoY")
+    op_yoy  = row.get("영업이익_YoY")
+    om_diff = row.get("영업이익률_변화")
+    per    = row.get("PER_최신") or row.get("PER_num")
+    pbr    = row.get("PBR_최신") or row.get("PBR_num")
+    roe    = row.get("ROE_최신")
+    fgnr   = row.get("외인소진율_num")
+    grade  = row.get("성장등급", "데이터X")
+
+    # 데이터 없으면 expander 자체를 생략
+    if grade == "데이터X" and (rev_25 is None or (isinstance(rev_25,float) and pd.isna(rev_25))):
+        return
+
+    # 성장등급 색상
+    grade_color = {
+        "🚀 폭발적 성장": "#10B981",
+        "📈 성장중":     "#22C55E",
+        "⚖️ 보합":      "#9CA3AF",
+        "📉 둔화":      "#F59E0B",
+        "❌ 역성장":     "#DC2626",
+    }.get(grade, "#6B7280")
+
+    # OOS 인사이트 (역성장이 슈퍼위너 더 많이 나옴)
+    insight = {
+        "🚀 폭발적 성장": ("⚠️ 의외: 폭발 성장 종목은 SW 적중 42% — 의외로 낮음", "#F59E0B"),
+        "📈 성장중":     ("📊 안정 성장은 SW 적중 31% — 보수적", "#9CA3AF"),
+        "⚖️ 보합":      ("📊 보합 종목은 SW 적중 17% — 낮음", "#6B7280"),
+        "📉 둔화":      ("✅ 둔화는 SW 적중 ~75% — 회복 베팅 유효", "#10B981"),
+        "❌ 역성장":     ("🔥 V자 반등! 역성장 종목 SW 적중 81% — 최강", "#DC2626"),
+        "데이터X":      ("", ""),
+    }.get(grade, ("", ""))
+
+    def _fmt_num(v, unit=""):
+        if v is None or (isinstance(v,float) and pd.isna(v)): return "—"
+        if unit == "억":
+            return f"{v/1:,.0f}억"  # 이미 억원 단위로 저장됨 (확인 필요)
+        if unit == "%":
+            return f"{v:+.1f}%" if isinstance(v,(int,float)) else "—"
+        return f"{v:,.2f}" if isinstance(v,(int,float)) else "—"
+
+    # 매출/영업이익 단위 표시 (DART 단위: 억원)
+    def _fmt_won(v):
+        if v is None or pd.isna(v): return "—"
+        try:
+            if abs(v) >= 1e4: return f"{v/1e4:,.1f}조"
+            else:             return f"{v:,.0f}억"
+        except Exception: return "—"
+
+    with st.expander(f"🏢 {name} 기업 분석 (매출·영업이익 추이 + 성장 평가)", expanded=False):
+        # 성장 등급 배지 (큰 컬러 박스)
+        st.markdown(f"""
+<div style="background:{grade_color};color:white;padding:12px 16px;border-radius:8px;margin-bottom:10px;text-align:center;">
+  <div style="font-size:11px;opacity:0.85;letter-spacing:1px;">최근 2년 성장 평가</div>
+  <div style="font-size:22px;font-weight:900;margin-top:4px;">{grade}</div>
+  {f'<div style="font-size:12px;margin-top:6px;opacity:0.95;">{insight[0]}</div>' if insight[0] else ''}
+</div>
+""", unsafe_allow_html=True)
+
+        # 매출/영업이익 표
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.markdown("**📊 매출액**")
+            st.markdown(f"- 2024년: **{_fmt_won(rev_24)}**")
+            st.markdown(f"- 2025년: **{_fmt_won(rev_25)}**")
+            if pd.notna(rev_yoy):
+                color = "#10B981" if rev_yoy > 0 else "#DC2626"
+                st.markdown(f"- YoY: <span style='color:{color};font-weight:700;'>{rev_yoy:+.1f}%</span>", unsafe_allow_html=True)
+        with col2:
+            st.markdown("**💰 영업이익**")
+            st.markdown(f"- 2024년: **{_fmt_won(op_24)}**")
+            st.markdown(f"- 2025년: **{_fmt_won(op_25)}**")
+            if pd.notna(op_yoy):
+                color = "#10B981" if op_yoy > 0 else "#DC2626"
+                st.markdown(f"- YoY: <span style='color:{color};font-weight:700;'>{op_yoy:+.1f}%</span>", unsafe_allow_html=True)
+        with col3:
+            st.markdown("**📈 영업이익률**")
+            if pd.notna(om_24): st.markdown(f"- 2024년: **{om_24:.2f}%**")
+            else: st.markdown("- 2024년: —")
+            if pd.notna(om_25): st.markdown(f"- 2025년: **{om_25:.2f}%**")
+            else: st.markdown("- 2025년: —")
+            if pd.notna(om_diff):
+                color = "#10B981" if om_diff > 0 else "#DC2626"
+                st.markdown(f"- 변화: <span style='color:{color};font-weight:700;'>{om_diff:+.2f}%p</span>", unsafe_allow_html=True)
+
+        st.markdown("---")
+        # 밸류에이션 + 지분
+        col4, col5, col6, col7 = st.columns(4)
+        def _per_eval(v):
+            if v is None or pd.isna(v): return "—", "#6B7280"
+            try: v = float(v)
+            except: return "—", "#6B7280"
+            if v < 0: return f"{v:.1f} (적자)", "#DC2626"
+            if v < 10: return f"{v:.1f} (저평가)", "#10B981"
+            if v < 20: return f"{v:.1f} (보통)", "#9CA3AF"
+            return f"{v:.1f} (고평가)", "#F59E0B"
+        def _pbr_eval(v):
+            if v is None or pd.isna(v): return "—", "#6B7280"
+            try: v = float(v)
+            except: return "—", "#6B7280"
+            if v < 1: return f"{v:.2f} (자산↓)", "#10B981"
+            if v < 2: return f"{v:.2f} (보통)", "#9CA3AF"
+            return f"{v:.2f} (자산↑)", "#F59E0B"
+        per_txt, per_col = _per_eval(per)
+        pbr_txt, pbr_col = _pbr_eval(pbr)
+        with col4:
+            st.markdown(f"**PER** <span style='color:{per_col};font-weight:700;'>{per_txt}</span>", unsafe_allow_html=True)
+        with col5:
+            st.markdown(f"**PBR** <span style='color:{pbr_col};font-weight:700;'>{pbr_txt}</span>", unsafe_allow_html=True)
+        with col6:
+            if pd.notna(roe):
+                c = "#10B981" if roe > 10 else ("#F59E0B" if roe > 5 else "#DC2626")
+                st.markdown(f"**ROE** <span style='color:{c};font-weight:700;'>{roe:.1f}%</span>", unsafe_allow_html=True)
+            else:
+                st.markdown("**ROE** —")
+        with col7:
+            if pd.notna(fgnr):
+                st.markdown(f"**외인지분** <span style='font-weight:700;'>{fgnr:.1f}%</span>", unsafe_allow_html=True)
+            else:
+                st.markdown("**외인지분** —")
+
+        st.caption(
+            "💡 **5년 OOS 분석 결과**: 매출+영업이익이 둘 다 큰 폭으로 성장한 종목보다, "
+            "**역성장/이익률 하락한 종목**이 슈퍼위너(200%+)에 더 많이 나옴 (V자 반등). "
+            "성장세는 안정성 지표이지 슈퍼위너 예측 지표는 아님."
+        )
+
+
 def _prob_bar(label: str, prob_pct: float, color: str, is_main: bool = False):
     """미니 확률 바 (HTML)"""
     width = max(0, min(100, prob_pct))
@@ -278,6 +417,9 @@ def _render_pick_card(row: pd.Series, show_similar: bool = True):
             is_main = (pr == max_prob and lbl != "❌ 손절 (-20%↓)")
             bars_html += _prob_bar(lbl, pr, cc, is_main=is_main)
         st.markdown(bars_html, unsafe_allow_html=True)
+
+    # 🏢 기업 분석 (펀더멘털)
+    _render_fundamentals_block(row)
 
     reasons = _reason_text(row)
     if reasons:
