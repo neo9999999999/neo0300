@@ -19,7 +19,54 @@ def _grade_color(grade: str) -> str:
     return "#6B7280"
 
 
-def _render_pick_card(row: pd.Series):
+def _find_similar_cases(code: str, n: int = 5) -> pd.DataFrame:
+    """과거 매수 사례에서 같은 종목 또는 유사 패턴 찾기"""
+    path = CACHE / "MASTER_best_picks_2020-2026.csv"
+    if not path.exists(): return pd.DataFrame()
+    hist = pd.read_csv(path)
+    hist["Date"] = pd.to_datetime(hist["Date"])
+    same = hist[hist["Code"].astype(str) == str(code)].copy()
+    same = same.sort_values("Date", ascending=False).head(n)
+    return same
+
+
+def _reason_text(row: pd.Series) -> list:
+    """강력매수 사유 자동 생성"""
+    reasons = []
+    p_sw = row.get("슈퍼위너확률%", 0) or row.get("p_sw", 0)*100 if row.get("p_sw") else 0
+    p100 = row.get("100%+확률", 0) or row.get("p_100plus", 0)*100 if row.get("p_100plus") else 0
+    p50 = row.get("50%+확률", 0) or row.get("p_50plus", 0)*100 if row.get("p_50plus") else 0
+    ploss = row.get("손절확률%", 0) or row.get("p_loss", 0)*100 if row.get("p_loss") else 0
+
+    if p_sw >= 50: reasons.append(f"🏆 **슈퍼위너 확률 {p_sw:.0f}%** — peak ≥ 200% 도달 가능성 매우 높음")
+    elif p_sw >= 30: reasons.append(f"⭐ **슈퍼위너 확률 {p_sw:.0f}%** — peak ≥ 200% 가능")
+    elif p_sw >= 15: reasons.append(f"🌟 슈퍼위너 확률 {p_sw:.0f}% — 중상위 가능성")
+
+    if p100 >= 50: reasons.append(f"💯 **100%+ 확률 {p100:.0f}%** — 2배 도달 매우 가능")
+    elif p100 >= 30: reasons.append(f"💯 100%+ 확률 {p100:.0f}%")
+
+    if p50 >= 60: reasons.append(f"📈 **50%+ 확률 {p50:.0f}%** — 절반 이상 상승 매우 가능")
+    elif p50 >= 40: reasons.append(f"📈 50%+ 확률 {p50:.0f}%")
+
+    # 변수 기반 추가 사유
+    slope = row.get("slope60", 0)
+    past60 = row.get("past_60", 0)
+    pos252 = row.get("pos_252_high", 0)
+
+    if slope and slope >= 1: reasons.append(f"📊 60일 상승추세 (slope60={slope:.1f}) — 모멘텀 강함")
+    elif slope and slope >= 0.3: reasons.append(f"📊 60일 완만한 상승추세")
+
+    if past60 and 5 < past60 < 30: reasons.append(f"⚖️ 60일 +{past60:.0f}% 적정 상승 — 과열 아님")
+    if pos252 and -30 < pos252 < -5: reasons.append(f"📍 52주 고점 대비 {pos252:.0f}% — 눌림목 회복 자리")
+
+    if ploss < 30: reasons.append(f"✅ 손절 확률 {ploss:.0f}% — 안전한 자리")
+    elif ploss < 50: reasons.append(f"⚖️ 손절 확률 {ploss:.0f}% — 보통")
+    else: reasons.append(f"⚠️ 손절 확률 {ploss:.0f}% — 변동성 큰 종목")
+
+    return reasons
+
+
+def _render_pick_card(row: pd.Series, show_similar: bool = True):
     grade = row.get("등급", "")
     code = row.get("Code", "")
     name = row.get("Name", "")
@@ -30,7 +77,6 @@ def _render_pick_card(row: pd.Series):
     p100 = row.get("100%+확률", 0)
     p50 = row.get("50%+확률", 0)
     ploss = row.get("손절확률%", 0)
-    tags = row.get("가능성태그", "")
     market = row.get("Market", "")
     date = row.get("Date", "")
     if isinstance(date, str): date = date[:10]
@@ -42,11 +88,11 @@ def _render_pick_card(row: pd.Series):
 
     st.markdown(f"""
 <div style="border-left:4px solid {color};padding:14px 18px;background:rgba(0,0,0,0.02);
-            border-radius:6px;margin-bottom:12px;">
+            border-radius:6px;margin-bottom:8px;">
   <div style="display:flex;justify-content:space-between;align-items:center;">
     <div>
       <span style="font-size:14px;color:{color};font-weight:700;">{grade}</span>
-      <span style="font-size:18px;font-weight:800;margin-left:12px;">{name}</span>
+      <span style="font-size:20px;font-weight:800;margin-left:12px;">{name}</span>
       <span style="font-size:12px;color:#9CA3AF;margin-left:8px;">{code} · {market} · {date}</span>
     </div>
     <div style="text-align:right;">
@@ -55,15 +101,45 @@ def _render_pick_card(row: pd.Series):
     </div>
   </div>
   <div style="margin-top:12px;display:grid;grid-template-columns:repeat(5,1fr);gap:8px;font-size:12px;">
-    <div><b>슈퍼점수</b><br>{ss:.2f}</div>
-    <div><b>예상 최고가</b><br><span style="color:{color}">+{peak_pred:.0f}%</span></div>
-    <div><b>슈퍼위너 확률</b><br>{p_sw:.0f}%</div>
-    <div><b>100%+ 확률</b><br>{p100:.0f}%</div>
+    <div><b>슈퍼점수</b><br><span style="font-size:14px;color:{color};font-weight:700;">{ss:.2f}</span></div>
+    <div><b>예상 최고가</b><br><span style="font-size:14px;color:{color};font-weight:700;">+{peak_pred:.0f}%</span></div>
+    <div><b>슈퍼위너 확률</b><br><span style="font-size:14px;font-weight:700;">{p_sw:.0f}%</span></div>
+    <div><b>100%+ 확률</b><br><span style="font-size:14px;font-weight:700;">{p100:.0f}%</span></div>
     <div><b>50%+ / 손절</b><br>{p50:.0f}% / <span style="color:#EF4444">{ploss:.0f}%</span></div>
   </div>
-  {f'<div style="margin-top:8px;font-size:12px;color:#6B7280;">{tags}</div>' if tags else ''}
 </div>
 """, unsafe_allow_html=True)
+
+    # 사유
+    reasons = _reason_text(row)
+    if reasons:
+        with st.expander(f"📌 {name} 강력추천 사유 보기", expanded=False):
+            for r in reasons:
+                st.markdown(f"- {r}")
+
+    # 유사 사례 (과거 같은 종목 매수 결과)
+    if show_similar:
+        similar = _find_similar_cases(code, n=5)
+        if len(similar) > 0:
+            with st.expander(f"🔍 {name} 과거 매수 사례 ({len(similar)}건)", expanded=False):
+                hist_show = similar[[c for c in ["Date","Close","sell_close","ret_180d","peak_180d"] if c in similar.columns]].copy()
+                hist_show = hist_show.rename(columns={
+                    "Date":"발생일","Close":"매수가","sell_close":"매도가",
+                    "ret_180d":"180일 수익률(%)","peak_180d":"최고가 도달(%)"
+                })
+                if "발생일" in hist_show.columns:
+                    hist_show["발생일"] = pd.to_datetime(hist_show["발생일"]).dt.strftime("%Y-%m-%d")
+                for c in ["180일 수익률(%)","최고가 도달(%)"]:
+                    if c in hist_show.columns:
+                        hist_show[c] = hist_show[c].round(1)
+                st.dataframe(hist_show, hide_index=True, use_container_width=True)
+
+                # 통계
+                if "peak_180d" in similar.columns:
+                    avg_peak = similar["peak_180d"].mean()
+                    sw_count = (similar["peak_180d"]>=200).sum()
+                    w100_count = (similar["peak_180d"]>=100).sum()
+                    st.caption(f"📊 평균 최고가: +{avg_peak:.0f}% · 슈퍼위너 {sw_count}건 · 100%+ {w100_count}건")
 
 
 def _button_multiselect(label: str, options: list, default: list, key_prefix: str):
@@ -103,6 +179,17 @@ def page_superscore():
         with open(json_path, encoding="utf-8") as f:
             data = json.load(f)
 
+    def _sort_picks(picks_list):
+        """★ 강력매수만 추출 + 슈퍼점수 + 슈퍼위너확률 복합 정렬"""
+        strong = [p for p in picks_list if p.get("등급") == "★ 강력매수"]
+        # 우선순위: SuperScore × 0.5 + 슈퍼위너확률 × 0.005
+        def priority(p):
+            ss = p.get("SuperScore", 0) or 0
+            psw = p.get("슈퍼위너확률%", 0) or 0
+            return ss * 0.5 + psw * 0.01
+        strong.sort(key=priority, reverse=True)
+        return strong
+
     # ========== 탭 1: 오늘 추천 ==========
     with tabs[0]:
         if not data:
@@ -113,70 +200,58 @@ def page_superscore():
             st.markdown(f"**기준일**: {base_date}  ·  **갱신**: {updated}")
 
             today = data.get("today", {})
-            n = today.get("n", 0)
+            picks_all = today.get("picks", [])
+            strong = _sort_picks(picks_all)
 
-            if n == 0:
-                st.info("📭 기준일 발생 추천 없음 — 현금 보유")
+            if len(strong) == 0:
+                st.info("📭 오늘 ★ 강력매수 추천 없음 — 현금 보유 권장")
+                st.caption(f"(전체 시그널 {len(picks_all)}건 중 ★ 강력매수 0건)")
             else:
-                # 등급 필터 버튼
-                grades_avail = ["★ 강력매수", "○ 추천", "- 관망", "⚠️ 손절위험"]
-                sel_grades = _button_multiselect(
-                    "등급 필터", grades_avail,
-                    default=["★ 강력매수", "○ 추천"], key_prefix="today_grade")
-
-                picks = today["picks"]
-                picks_filtered = [p for p in picks if p.get("등급") in sel_grades]
-                st.markdown(f"### ⭐ 오늘 추천 ({len(picks_filtered)}/{n}건)")
-                for p in picks_filtered:
-                    _render_pick_card(pd.Series(p))
+                st.markdown(f"### ⭐ 오늘 ★ 강력매수 ({len(strong)}건)")
+                st.caption(f"정렬: 슈퍼점수 + 슈퍼위너 확률 종합 우선순위")
+                for p in strong:
+                    _render_pick_card(pd.Series(p), show_similar=True)
 
         st.markdown("---")
         with st.expander("📌 매수 가이드", expanded=False):
             st.markdown(
-                "1. **★ 강력매수**만 매수 (○ 추천은 자본 여유 시 선택)\n"
-                "2. **⚠️ 손절위험**은 매수 절대 X\n"
-                "3. **매수 시점**: 당일 NXT 19:50 시장가 (1순위) / D+1 시초가 (2순위)\n"
-                "4. **종목당 10만원** (자본 1억 → 0.1%)\n"
-                "5. **매도**: 매수일 + 180거래일 후 정규장 종가 시장가\n"
-                "6. **익절/손절 룰 X** (그냥 묻기)"
+                "1. **★ 강력매수만** 매수 (정렬: 슈퍼점수 + 슈퍼위너 확률)\n"
+                "2. **매수 시점**: 당일 NXT 19:50 시장가 (1순위) / D+1 시초가 (2순위)\n"
+                "3. **종목당 10만원** (자본 1억 → 0.1%)\n"
+                "4. **매도**: 매수일 + 180거래일 후 정규장 종가 시장가\n"
+                "5. **익절/손절 룰 X** (그냥 묻기)\n"
+                "6. **주 한도 5건** (★ 5건 채우면 그 주 stop)"
             )
 
     # ========== 탭 2: 이번 주 ==========
     with tabs[1]:
         week = data.get("week", {})
-        st.markdown(f"### 📅 이번 주 누적 추천 ({week.get('n', 0)}건)")
-        st.caption(f"주 시작일: {data.get('week_start', '')}")
+        picks_all = week.get("picks", [])
+        strong = _sort_picks(picks_all)
 
-        if week.get("n", 0) > 0:
-            grades_avail = ["★ 강력매수", "○ 추천", "- 관망", "⚠️ 손절위험"]
-            sel_grades = _button_multiselect(
-                "등급 필터", grades_avail,
-                default=["★ 강력매수", "○ 추천"], key_prefix="week_grade")
+        st.markdown(f"### 📅 이번 주 ★ 강력매수 ({len(strong)}건)")
+        st.caption(f"주 시작일: {data.get('week_start', '')}  ·  정렬: 슈퍼점수 + 슈퍼위너 확률")
 
-            picks = week["picks"]
-            picks_filtered = [p for p in picks if p.get("등급") in sel_grades]
-            for p in picks_filtered:
-                _render_pick_card(pd.Series(p))
+        if len(strong) == 0:
+            st.info("이번 주 ★ 강력매수 없음")
         else:
-            st.info("이번 주 추천 없음")
+            for p in strong:
+                _render_pick_card(pd.Series(p), show_similar=True)
 
     # ========== 탭 3: 지난 주 ==========
     with tabs[2]:
         last_week = data.get("last_week", {})
-        st.markdown(f"### 🗓️ 지난 주 추천 ({last_week.get('n', 0)}건)")
+        picks_all = last_week.get("picks", [])
+        strong = _sort_picks(picks_all)
 
-        if last_week.get("n", 0) > 0:
-            grades_avail = ["★ 강력매수", "○ 추천", "- 관망", "⚠️ 손절위험"]
-            sel_grades = _button_multiselect(
-                "등급 필터", grades_avail,
-                default=["★ 강력매수", "○ 추천"], key_prefix="lw_grade")
+        st.markdown(f"### 🗓️ 지난 주 ★ 강력매수 ({len(strong)}건)")
+        st.caption(f"정렬: 슈퍼점수 + 슈퍼위너 확률")
 
-            picks = last_week["picks"]
-            picks_filtered = [p for p in picks if p.get("등급") in sel_grades]
-            for p in picks_filtered:
-                _render_pick_card(pd.Series(p))
+        if len(strong) == 0:
+            st.info("지난 주 ★ 강력매수 없음")
         else:
-            st.info("지난 주 추천 데이터 없음")
+            for p in strong:
+                _render_pick_card(pd.Series(p), show_similar=True)
 
     # ========== 탭 4: 백테스트 ==========
     with tabs[3]:
