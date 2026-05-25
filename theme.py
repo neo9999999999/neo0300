@@ -664,6 +664,6 @@ def get_logo_html(mode: str = "light") -> str:
         f'<div style="font-size:16px;font-weight:800;color:{t["text"]};line-height:1.2;letter-spacing:-0.4px;">'
         f'NEO STOCK</div>'
         f'<div style="font-size:10px;color:{t["text_3"]};letter-spacing:0.6px;font-weight:600;text-transform:uppercase;">'
-        f'V·S·A·B 등급제</div>'
+        f'슈퍼강력매수 · 추천매수</div>'
         f'</div></div></div>'
     )

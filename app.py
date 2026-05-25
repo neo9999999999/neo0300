@@ -607,7 +607,7 @@ def page_today():
     render_mobile_nav()
     p = PALETTE[st.session_state.theme]
     st.markdown(
-        f'<h1>오늘의 종가매수 추천 — V/S/A/B 등급제</h1>'
+        f'<h1>오늘의 종가매수 추천</h1>'
         f'<p style="color:{p["text_secondary"]};font-size:14px;margin-bottom:18px;">'
         f'4개 프리셋 통합 분석 (default · 박스돌파 · 하바로셀 · 풀백). 코스닥 + 돌파매매 + 등락 7~25% 기준.'
         f'</p>',
@@ -2522,9 +2522,9 @@ def page_results():
     render_mobile_nav()
     p = PALETTE[st.session_state.theme]
     st.markdown(
-        '<h1>백테스트 결과 — V/S/A/B 등급제 (OOS 검증)</h1>'
+        '<h1>백테스트 결과 (OOS 검증)</h1>'
         f'<p style="color:{p["text_secondary"]};">'
-        '4 프리셋 앙상블 등급제 — 코스닥 + 돌파매매 + 등락 7~25% · 120일 보유 손익 · '
+        '4 프리셋 앙상블 — 슈퍼강력매수 · 추천매수 · 180일 보유 손익 · '
         '미래 데이터 미사용 (Out-of-Sample).</p>',
         unsafe_allow_html=True,
     )
