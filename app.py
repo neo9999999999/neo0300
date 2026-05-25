@@ -51,18 +51,20 @@ st.set_page_config(
 )
 
 
-# ===== 비밀번호 인증 (네이버 그린 디자인) =====
+# ===== 비밀번호 인증 (현재 비활성화 — 필요 시 재활성화) =====
+# 사용자 요청으로 로그인 게이트를 일시 해제했습니다.
+# 다시 켜려면 아래 함수에서 'return True' 줄을 제거하면 됩니다.
 def _check_password():
-    """깔끔한 로그인 게이트. 문구 X, 비번 입력 + 버튼만."""
+    """로그인 게이트 — 현재 무조건 통과 (비번 없음)."""
+    st.session_state.auth_ok = True
+    return True
+    # === 아래 코드는 비활성화 — 필요 시 복원 ===
     try:
         correct = st.secrets.get("APP_PASSWORD", "123456")
     except Exception:
         correct = "123456"
-
     if st.session_state.get("auth_ok"):
         return True
-
-    # 로그인 화면 — 네이버 그린 그라데이션 로고만
     st.markdown(
         '<style>'
         '.login-container { max-width: 400px; margin: 100px auto 40px; text-align: center; }'
@@ -77,13 +79,11 @@ def _check_password():
         '</div>',
         unsafe_allow_html=True,
     )
-
     col1, col2, col3 = st.columns([1, 2.5, 1])
     with col2:
         pwd = st.text_input("비밀번호", type="password", key="_pwd_input",
                               placeholder="비밀번호", label_visibility="collapsed")
         login = st.button("로그인", type="primary", use_container_width=True, key="_login_btn")
-
         if login or pwd:
             if pwd == str(correct):
                 st.session_state.auth_ok = True
