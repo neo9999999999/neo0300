@@ -1146,6 +1146,45 @@ def page_backtest():
 </div>
 """, unsafe_allow_html=True)
 
+        # ── 승률 현황 — 큰 카드 (선택 년도 기준 자동 갱신) ──
+        win_pct_total = win_n / max(n, 1) * 100
+        win_pct_ex_loss = win_n / max(n - loss_n, 1) * 100
+        loss_pct = loss_n / max(n, 1) * 100
+        flat_n = n - win_n - loss_n  # 보합
+        st.markdown(f"""
+<div style="margin-top:10px;background:white;border:1px solid #E5E7EB;border-radius:8px;
+            padding:14px 18px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;">
+
+  <div style="text-align:center;padding-right:14px;border-right:1px solid #F3F4F6;">
+    <div style="font-size:11px;color:#6B7280;letter-spacing:1px;font-weight:700;">총 승률 (익절 5%↑)</div>
+    <div style="font-size:34px;font-weight:900;color:#DC2626;line-height:1.1;margin-top:4px;">
+      {win_pct_total:.1f}<span style="font-size:18px;">%</span>
+    </div>
+    <div style="font-size:11px;color:#6B7280;margin-top:2px;">{win_n}건 / {n}건</div>
+  </div>
+
+  <div style="text-align:center;padding:0 14px;border-right:1px solid #F3F4F6;background:#FEF2F2;border-radius:6px;">
+    <div style="font-size:11px;color:#7F1D1D;letter-spacing:1px;font-weight:700;">손절 제외 승률 ⭐</div>
+    <div style="font-size:34px;font-weight:900;color:#B91C1C;line-height:1.1;margin-top:4px;">
+      {win_pct_ex_loss:.1f}<span style="font-size:18px;">%</span>
+    </div>
+    <div style="font-size:11px;color:#6B7280;margin-top:2px;">
+      {win_n}건 / {n - loss_n}건 (손절 {loss_n}건 제외)
+    </div>
+  </div>
+
+  <div style="text-align:center;padding-left:14px;">
+    <div style="font-size:11px;color:#6B7280;letter-spacing:1px;font-weight:700;">손절률 -5%↓</div>
+    <div style="font-size:34px;font-weight:900;color:#1D4ED8;line-height:1.1;margin-top:4px;">
+      {loss_pct:.1f}<span style="font-size:18px;">%</span>
+    </div>
+    <div style="font-size:11px;color:#6B7280;margin-top:2px;">
+      {loss_n}건 (보합 {flat_n}건)
+    </div>
+  </div>
+</div>
+""", unsafe_allow_html=True)
+
         # Row 2: 매도 실현 단계별 도달
         st.markdown(f"""
 <div style="margin-top:8px;background:white;border:1px solid #E5E7EB;border-radius:8px;padding:10px 14px;">
