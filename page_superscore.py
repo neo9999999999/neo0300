@@ -1,42 +1,45 @@
 """
-SuperScore 추천 페이지 (Streamlit) — 한글 정리 + 버튼 멀티선택
+SuperScore 추천 페이지들 (좌측 메뉴별 분리)
+=======================================
+- page_today_pick: 오늘의 추천
+- page_this_week: 이번 주
+- page_last_week: 지난 주
+- page_backtest: 백테스트
+- page_case_validation: 추천 사례 검증
+- page_buy_rule: 매수 룰
 """
 
 import streamlit as st
 import pandas as pd
 import json
 from pathlib import Path
-from datetime import datetime
 
 CACHE = Path("cache")
 
 
 def _grade_color(grade: str) -> str:
-    if "강력매수" in grade: return "#10B981"
-    if "추천" in grade: return "#3B82F6"
-    if "관망" in grade: return "#9CA3AF"
-    if "손절위험" in grade: return "#EF4444"
+    if "강력매수" in grade: return "#DC2626"  # 강렬한 빨강 (Red 600)
+    if "추천" in grade: return "#F97316"  # 주황 (Orange 500)
+    if "관망" in grade: return "#9CA3AF"  # 회색
+    if "손절위험" in grade: return "#7F1D1D"  # 진한 다크 레드 (Red 900)
     return "#6B7280"
 
 
 def _find_similar_cases(code: str, n: int = 5) -> pd.DataFrame:
-    """과거 매수 사례에서 같은 종목 또는 유사 패턴 찾기"""
     path = CACHE / "MASTER_best_picks_2020-2026.csv"
     if not path.exists(): return pd.DataFrame()
     hist = pd.read_csv(path)
     hist["Date"] = pd.to_datetime(hist["Date"])
     same = hist[hist["Code"].astype(str) == str(code)].copy()
-    same = same.sort_values("Date", ascending=False).head(n)
-    return same
+    return same.sort_values("Date", ascending=False).head(n)
 
 
 def _reason_text(row: pd.Series) -> list:
-    """강력매수 사유 자동 생성"""
     reasons = []
-    p_sw = row.get("슈퍼위너확률%", 0) or row.get("p_sw", 0)*100 if row.get("p_sw") else 0
-    p100 = row.get("100%+확률", 0) or row.get("p_100plus", 0)*100 if row.get("p_100plus") else 0
-    p50 = row.get("50%+확률", 0) or row.get("p_50plus", 0)*100 if row.get("p_50plus") else 0
-    ploss = row.get("손절확률%", 0) or row.get("p_loss", 0)*100 if row.get("p_loss") else 0
+    p_sw = row.get("슈퍼위너확률%", 0)
+    p100 = row.get("100%+확률", 0)
+    p50 = row.get("50%+확률", 0)
+    ploss = row.get("손절확률%", 0)
 
     if p_sw >= 50: reasons.append(f"🏆 **슈퍼위너 확률 {p_sw:.0f}%** — peak ≥ 200% 도달 가능성 매우 높음")
     elif p_sw >= 30: reasons.append(f"⭐ **슈퍼위너 확률 {p_sw:.0f}%** — peak ≥ 200% 가능")
@@ -48,21 +51,18 @@ def _reason_text(row: pd.Series) -> list:
     if p50 >= 60: reasons.append(f"📈 **50%+ 확률 {p50:.0f}%** — 절반 이상 상승 매우 가능")
     elif p50 >= 40: reasons.append(f"📈 50%+ 확률 {p50:.0f}%")
 
-    # 변수 기반 추가 사유
     slope = row.get("slope60", 0)
     past60 = row.get("past_60", 0)
     pos252 = row.get("pos_252_high", 0)
 
-    if slope and slope >= 1: reasons.append(f"📊 60일 상승추세 (slope60={slope:.1f}) — 모멘텀 강함")
-    elif slope and slope >= 0.3: reasons.append(f"📊 60일 완만한 상승추세")
-
-    if past60 and 5 < past60 < 30: reasons.append(f"⚖️ 60일 +{past60:.0f}% 적정 상승 — 과열 아님")
-    if pos252 and -30 < pos252 < -5: reasons.append(f"📍 52주 고점 대비 {pos252:.0f}% — 눌림목 회복 자리")
+    if slope and slope >= 1: reasons.append(f"📊 60일 상승추세 강함 (slope60={slope:.1f})")
+    elif slope and slope >= 0.3: reasons.append("📊 60일 완만한 상승추세")
+    if past60 and 5 < past60 < 30: reasons.append(f"⚖️ 60일 +{past60:.0f}% 적정 상승")
+    if pos252 and -30 < pos252 < -5: reasons.append(f"📍 52주 고점 -{abs(pos252):.0f}% — 눌림목 회복")
 
     if ploss < 30: reasons.append(f"✅ 손절 확률 {ploss:.0f}% — 안전한 자리")
     elif ploss < 50: reasons.append(f"⚖️ 손절 확률 {ploss:.0f}% — 보통")
     else: reasons.append(f"⚠️ 손절 확률 {ploss:.0f}% — 변동성 큰 종목")
-
     return reasons
 
 
@@ -110,14 +110,12 @@ def _render_pick_card(row: pd.Series, show_similar: bool = True):
 </div>
 """, unsafe_allow_html=True)
 
-    # 사유
     reasons = _reason_text(row)
     if reasons:
-        with st.expander(f"📌 {name} 강력추천 사유 보기", expanded=False):
+        with st.expander(f"📌 {name} 강력추천 사유", expanded=False):
             for r in reasons:
                 st.markdown(f"- {r}")
 
-    # 유사 사례 (과거 같은 종목 매수 결과)
     if show_similar:
         similar = _find_similar_cases(code, n=5)
         if len(similar) > 0:
@@ -134,7 +132,6 @@ def _render_pick_card(row: pd.Series, show_similar: bool = True):
                         hist_show[c] = hist_show[c].round(1)
                 st.dataframe(hist_show, hide_index=True, use_container_width=True)
 
-                # 통계
                 if "peak_180d" in similar.columns:
                     avg_peak = similar["peak_180d"].mean()
                     sw_count = (similar["peak_180d"]>=200).sum()
@@ -143,12 +140,9 @@ def _render_pick_card(row: pd.Series, show_similar: bool = True):
 
 
 def _button_multiselect(label: str, options: list, default: list, key_prefix: str):
-    """버튼 형식 멀티선택 (on/off 토글)"""
     if f"{key_prefix}_selected" not in st.session_state:
         st.session_state[f"{key_prefix}_selected"] = list(default)
-
     selected = st.session_state[f"{key_prefix}_selected"]
-
     st.markdown(f"**{label}**")
     cols = st.columns(min(len(options), 8))
     for i, opt in enumerate(options):
@@ -157,264 +151,323 @@ def _button_multiselect(label: str, options: list, default: list, key_prefix: st
         btn_type = "primary" if is_on else "secondary"
         if col.button(str(opt), key=f"{key_prefix}_btn_{opt}", type=btn_type,
                        use_container_width=True):
-            if is_on:
-                selected.remove(opt)
-            else:
-                selected.append(opt)
+            if is_on: selected.remove(opt)
+            else: selected.append(opt)
             st.session_state[f"{key_prefix}_selected"] = selected
             st.rerun()
     return selected
 
 
-def page_superscore():
-    st.markdown('<h1 style="margin-bottom:8px;">💎 슈퍼스코어 추천</h1>', unsafe_allow_html=True)
-    st.caption("시총 300 풀 + 4 RF 분류기 + 5년 walk-forward OOS")
+def _load_json():
+    p = CACHE / "today_picks.json"
+    if not p.exists(): return {}
+    with open(p, encoding="utf-8") as f:
+        return json.load(f)
 
-    tabs = st.tabs(["🎯 오늘 추천", "📅 이번 주", "🗓️ 지난 주", "📊 백테스트 (년월 선택)", "📋 매수 룰"])
 
-    # 공통: json 로드
-    json_path = CACHE / "today_picks.json"
-    data = {}
-    if json_path.exists():
-        with open(json_path, encoding="utf-8") as f:
-            data = json.load(f)
+def _sort_strong(picks_list):
+    strong = [p for p in picks_list if p.get("등급") == "★ 강력매수"]
+    def priority(p):
+        ss = p.get("SuperScore", 0) or 0
+        psw = p.get("슈퍼위너확률%", 0) or 0
+        return ss * 0.5 + psw * 0.01
+    strong.sort(key=priority, reverse=True)
+    return strong
 
-    def _sort_picks(picks_list):
-        """★ 강력매수만 추출 + 슈퍼점수 + 슈퍼위너확률 복합 정렬"""
-        strong = [p for p in picks_list if p.get("등급") == "★ 강력매수"]
-        # 우선순위: SuperScore × 0.5 + 슈퍼위너확률 × 0.005
-        def priority(p):
-            ss = p.get("SuperScore", 0) or 0
-            psw = p.get("슈퍼위너확률%", 0) or 0
-            return ss * 0.5 + psw * 0.01
-        strong.sort(key=priority, reverse=True)
-        return strong
 
-    # ========== 탭 1: 오늘 추천 ==========
-    with tabs[0]:
-        if not data:
-            st.warning("아직 추천 데이터가 없습니다.")
-        else:
-            base_date = data.get("base_date", "")
-            updated = data.get("updated_at", "")[:16]
-            st.markdown(f"**기준일**: {base_date}  ·  **갱신**: {updated}")
+# ============ 좌측 메뉴 페이지들 ============
 
-            today = data.get("today", {})
-            picks_all = today.get("picks", [])
-            strong = _sort_picks(picks_all)
+def page_today_pick():
+    """🎯 오늘의 추천"""
+    st.markdown('<h1>🎯 오늘의 추천</h1>', unsafe_allow_html=True)
+    data = _load_json()
+    if not data:
+        st.warning("추천 데이터가 없습니다."); return
 
-            if len(strong) == 0:
-                st.info("📭 오늘 ★ 강력매수 추천 없음 — 현금 보유 권장")
-                st.caption(f"(전체 시그널 {len(picks_all)}건 중 ★ 강력매수 0건)")
-            else:
-                st.markdown(f"### ⭐ 오늘 ★ 강력매수 ({len(strong)}건)")
-                st.caption(f"정렬: 슈퍼점수 + 슈퍼위너 확률 종합 우선순위")
-                for p in strong:
-                    _render_pick_card(pd.Series(p), show_similar=True)
+    base_date = data.get("base_date", "")
+    updated = data.get("updated_at", "")[:16]
+    st.markdown(f"**기준일**: {base_date}  ·  **갱신**: {updated}")
 
+    today = data.get("today", {})
+    strong = _sort_strong(today.get("picks", []))
+
+    if len(strong) == 0:
+        st.info("📭 오늘 ★ 강력매수 추천 없음 — 현금 보유 권장")
+        st.caption(f"(전체 시그널 {today.get('n', 0)}건 중 ★ 강력매수 0건)")
+    else:
+        st.markdown(f"### ⭐ ★ 강력매수 ({len(strong)}건)")
+        st.caption("정렬: 슈퍼점수 + 슈퍼위너 확률 종합 우선순위")
+        for p in strong:
+            _render_pick_card(pd.Series(p), show_similar=True)
+
+
+def page_this_week():
+    """📅 이번 주 추천"""
+    st.markdown('<h1>📅 이번 주 추천</h1>', unsafe_allow_html=True)
+    data = _load_json()
+    week = data.get("week", {})
+    strong = _sort_strong(week.get("picks", []))
+
+    st.markdown(f"### ★ 강력매수 ({len(strong)}건)")
+    st.caption(f"주 시작일: {data.get('week_start', '')}  ·  정렬: 슈퍼점수 + 슈퍼위너 확률")
+
+    if len(strong) == 0:
+        st.info("이번 주 ★ 강력매수 없음")
+    else:
+        for p in strong:
+            _render_pick_card(pd.Series(p), show_similar=True)
+
+
+def page_last_week():
+    """🗓️ 지난 주 추천"""
+    st.markdown('<h1>🗓️ 지난 주 추천</h1>', unsafe_allow_html=True)
+    data = _load_json()
+    last_week = data.get("last_week", {})
+    strong = _sort_strong(last_week.get("picks", []))
+
+    st.markdown(f"### ★ 강력매수 ({len(strong)}건)")
+    st.caption("정렬: 슈퍼점수 + 슈퍼위너 확률")
+
+    if len(strong) == 0:
+        st.info("지난 주 ★ 강력매수 없음")
+    else:
+        for p in strong:
+            _render_pick_card(pd.Series(p), show_similar=True)
+
+
+def page_backtest():
+    """📊 백테스트 (년월 선택)"""
+    st.markdown('<h1>📊 백테스트 (2022-2026 walk-forward OOS)</h1>', unsafe_allow_html=True)
+
+    # 년도별 요약
+    yr_path = CACHE / "MASTER_best_yearly.csv"
+    if yr_path.exists():
+        yr = pd.read_csv(yr_path)
+        yr = yr.rename(columns={
+            "year":"년도","매수":"매수","SW":"슈퍼위너",
+            "100+":"100%+","50+":"50%+","10+":"10%+",
+            "손절":"손절","투자만":"투자(만원)",
+            "수익만":"수익(만원)","수익률%":"수익률(%)"
+        })
+        st.markdown("#### 📅 년도별 요약")
+        st.dataframe(yr, hide_index=True, use_container_width=True)
+
+        cols = st.columns(4)
+        cols[0].metric("총 매수", f"{int(yr['매수'].sum()):,}건")
+        cols[1].metric("총 투자", f"{int(yr['투자(만원)'].sum()):,}만")
+        cols[2].metric("총 수익", f"{int(yr['수익(만원)'].sum()):+,}만")
+        tot_inv = yr['투자(만원)'].sum()
+        tot_prof = yr['수익(만원)'].sum()
+        cols[3].metric("5년 수익률", f"{tot_prof/tot_inv*100:+.1f}%")
+
+    st.markdown("---")
+    st.markdown("#### 📋 매수 종목 전체")
+
+    picks_path = CACHE / "MASTER_best_picks_2020-2026.csv"
+    if not picks_path.exists():
+        st.warning("백테스트 데이터 없음"); return
+
+    picks = pd.read_csv(picks_path)
+    picks["Date"] = pd.to_datetime(picks["Date"])
+    picks["년도"] = picks["Date"].dt.year
+    picks["월"] = picks["Date"].dt.month
+
+    def cls(row):
+        p = row.get("peak_180d", 0)
+        if pd.isna(p): return "미정"
+        if p >= 200: return "🏆 슈퍼위너"
+        if p >= 100: return "💯 100%+"
+        if p >= 50: return "📈 50%+"
+        if p >= 10: return "✅ 10%+"
+        if row.get("ret_180d", 0) <= -20: return "❌ 손절"
+        return "💤 보합"
+    picks["결과"] = picks.apply(cls, axis=1)
+
+    years_avail = sorted(picks["년도"].dropna().unique().astype(int).tolist())
+    sel_years = _button_multiselect(
+        "년도 (다중 선택)", years_avail, default=years_avail, key_prefix="bt_year")
+
+    months_avail = list(range(1, 13))
+    sel_months = _button_multiselect(
+        "월 (다중 선택)", months_avail, default=months_avail, key_prefix="bt_month")
+
+    results_avail = ["🏆 슈퍼위너","💯 100%+","📈 50%+","✅ 10%+","💤 보합","❌ 손절","미정"]
+    sel_results = _button_multiselect(
+        "결과 (다중 선택)", results_avail,
+        default=["🏆 슈퍼위너","💯 100%+","📈 50%+"], key_prefix="bt_result")
+
+    sort_options = {
+        "최신 일자순": ("Date", False),
+        "오래된 일자순": ("Date", True),
+        "최고가 높은순": ("peak_180d", False),
+        "수익률 높은순": ("ret_180d", False),
+        "수익률 낮은순": ("ret_180d", True),
+        "슈퍼점수 높은순": ("SuperScore_v2", False),
+    }
+    sort_keys = list(sort_options.keys())
+    if "bt_sort_selected" not in st.session_state:
+        st.session_state.bt_sort_selected = "최신 일자순"
+
+    st.markdown("**정렬 기준**")
+    sort_cols = st.columns(len(sort_keys))
+    for i, sk in enumerate(sort_keys):
+        is_sel = st.session_state.bt_sort_selected == sk
+        btn_type = "primary" if is_sel else "secondary"
+        if sort_cols[i].button(sk, key=f"bt_sort_{sk}",
+                                 type=btn_type, use_container_width=True):
+            st.session_state.bt_sort_selected = sk
+            st.rerun()
+
+    sort_col_key, sort_asc = sort_options[st.session_state.bt_sort_selected]
+    if sort_col_key not in picks.columns:
+        sort_col_key = "Date"
+
+    filtered = picks[
+        picks["년도"].isin(sel_years) &
+        picks["월"].isin(sel_months) &
+        picks["결과"].isin(sel_results)
+    ]
+    filtered = filtered.sort_values(sort_col_key, ascending=sort_asc)
+
+    show_map = {
+        "Date":"일자","년도":"년도","월":"월",
+        "Code":"종목코드","Name":"종목명","Market":"시장",
+        "Close":"매수가","결과":"결과",
+        "ret_180d":"180일수익률(%)","peak_180d":"최고가도달(%)",
+        "sell_close":"매도가","sell_date":"매도일",
+        "SuperScore_v2":"슈퍼점수",
+        "p_sw":"슈퍼위너확률","p_100plus":"100%+확률",
+        "p_50plus":"50%+확률","p_loss":"손절확률",
+    }
+    show_cols = [c for c in show_map if c in filtered.columns]
+    display = filtered[show_cols].rename(columns=show_map).head(500)
+
+    if "일자" in display.columns:
+        display["일자"] = pd.to_datetime(display["일자"]).dt.strftime("%Y-%m-%d")
+    for c in ["슈퍼위너확률","100%+확률","50%+확률","손절확률"]:
+        if c in display.columns:
+            display[c] = (display[c]*100).round(1).astype(str) + "%"
+
+    st.dataframe(display, hide_index=True, use_container_width=True, height=600)
+    st.caption(f"검색 결과 {len(filtered):,}건 중 최대 500건 표시")
+
+
+def page_case_validation():
+    """🔍 추천 사례 검증 (현재 추천 종목들의 과거 성과)"""
+    st.markdown('<h1>🔍 추천 사례 검증</h1>', unsafe_allow_html=True)
+    st.caption("현재 추천 종목들의 과거 5년 매수 사례 검증")
+
+    data = _load_json()
+    picks_all = []
+    for key in ["today","week","last_week"]:
+        for p in data.get(key, {}).get("picks", []):
+            if p.get("등급") == "★ 강력매수":
+                p_ = dict(p); p_["기간"] = {"today":"오늘","week":"이번주","last_week":"지난주"}[key]
+                picks_all.append(p_)
+
+    # 중복 제거 (같은 종목 한 번만)
+    seen = set()
+    uniq = []
+    for p in picks_all:
+        if p["Code"] not in seen:
+            seen.add(p["Code"]); uniq.append(p)
+
+    if len(uniq) == 0:
+        st.info("현재 ★ 강력매수 종목 없음"); return
+
+    st.markdown(f"### ★ 강력매수 종목 {len(uniq)}개의 과거 매수 사례")
+
+    for p in uniq:
+        code = p["Code"]; name = p["Name"]
+        st.markdown(f"#### 🔎 {name} ({code}) — {p['기간']} 추천")
+
+        similar = _find_similar_cases(code, n=20)
+        if len(similar) == 0:
+            st.caption("과거 매수 사례 없음")
+            continue
+
+        # 통계
+        avg_peak = similar["peak_180d"].mean()
+        avg_ret = similar["ret_180d"].mean()
+        sw_count = (similar["peak_180d"]>=200).sum()
+        w100_count = (similar["peak_180d"]>=100).sum()
+        w50_count = (similar["peak_180d"]>=50).sum()
+        loss_count = (similar["ret_180d"]<=-20).sum()
+        n = len(similar)
+
+        cols = st.columns(6)
+        cols[0].metric("매수 사례", f"{n}건")
+        cols[1].metric("평균 최고가", f"+{avg_peak:.0f}%")
+        cols[2].metric("평균 수익률", f"{avg_ret:+.0f}%")
+        cols[3].metric("슈퍼위너", f"{sw_count}건")
+        cols[4].metric("100%+", f"{w100_count}건")
+        cols[5].metric("손절", f"{loss_count}건")
+
+        # 표
+        show = similar[[c for c in ["Date","Close","sell_close","ret_180d","peak_180d"] if c in similar.columns]].copy()
+        show = show.rename(columns={
+            "Date":"발생일","Close":"매수가","sell_close":"매도가",
+            "ret_180d":"180일수익률(%)","peak_180d":"최고가도달(%)"
+        })
+        if "발생일" in show.columns:
+            show["발생일"] = pd.to_datetime(show["발생일"]).dt.strftime("%Y-%m-%d")
+        for c in ["180일수익률(%)","최고가도달(%)"]:
+            if c in show.columns:
+                show[c] = show[c].round(1)
+        st.dataframe(show, hide_index=True, use_container_width=True)
         st.markdown("---")
-        with st.expander("📌 매수 가이드", expanded=False):
-            st.markdown(
-                "1. **★ 강력매수만** 매수 (정렬: 슈퍼점수 + 슈퍼위너 확률)\n"
-                "2. **매수 시점**: 당일 NXT 19:50 시장가 (1순위) / D+1 시초가 (2순위)\n"
-                "3. **종목당 10만원** (자본 1억 → 0.1%)\n"
-                "4. **매도**: 매수일 + 180거래일 후 정규장 종가 시장가\n"
-                "5. **익절/손절 룰 X** (그냥 묻기)\n"
-                "6. **주 한도 5건** (★ 5건 채우면 그 주 stop)"
-            )
 
-    # ========== 탭 2: 이번 주 ==========
-    with tabs[1]:
-        week = data.get("week", {})
-        picks_all = week.get("picks", [])
-        strong = _sort_picks(picks_all)
 
-        st.markdown(f"### 📅 이번 주 ★ 강력매수 ({len(strong)}건)")
-        st.caption(f"주 시작일: {data.get('week_start', '')}  ·  정렬: 슈퍼점수 + 슈퍼위너 확률")
+def page_buy_rule():
+    """📋 매수 룰"""
+    st.markdown('<h1>📋 매수 룰</h1>', unsafe_allow_html=True)
 
-        if len(strong) == 0:
-            st.info("이번 주 ★ 강력매수 없음")
-        else:
-            for p in strong:
-                _render_pick_card(pd.Series(p), show_similar=True)
-
-    # ========== 탭 3: 지난 주 ==========
-    with tabs[2]:
-        last_week = data.get("last_week", {})
-        picks_all = last_week.get("picks", [])
-        strong = _sort_picks(picks_all)
-
-        st.markdown(f"### 🗓️ 지난 주 ★ 강력매수 ({len(strong)}건)")
-        st.caption(f"정렬: 슈퍼점수 + 슈퍼위너 확률")
-
-        if len(strong) == 0:
-            st.info("지난 주 ★ 강력매수 없음")
-        else:
-            for p in strong:
-                _render_pick_card(pd.Series(p), show_similar=True)
-
-    # ========== 탭 4: 백테스트 ==========
-    with tabs[3]:
-        st.markdown("### 📊 5년 백테스트 (2022-2026 walk-forward OOS)")
-
-        # 년도별 요약
-        yr_path = CACHE / "MASTER_best_yearly.csv"
-        if yr_path.exists():
-            yr = pd.read_csv(yr_path)
-            # 한글 컬럼명
-            yr = yr.rename(columns={
-                "year": "년도", "매수": "매수", "SW": "슈퍼위너",
-                "100+": "100%+", "50+": "50%+", "10+": "10%+",
-                "손절": "손절", "투자만": "투자(만원)",
-                "수익만": "수익(만원)", "수익률%": "수익률(%)"
-            })
-            st.markdown("#### 📅 년도별 요약")
-            st.dataframe(yr, hide_index=True, use_container_width=True)
-
-            cols = st.columns(4)
-            cols[0].metric("총 매수", f"{int(yr['매수'].sum()):,}건")
-            cols[1].metric("총 투자", f"{int(yr['투자(만원)'].sum()):,}만")
-            cols[2].metric("총 수익", f"{int(yr['수익(만원)'].sum()):+,}만")
-            tot_inv = yr['투자(만원)'].sum()
-            tot_prof = yr['수익(만원)'].sum()
-            cols[3].metric("5년 수익률", f"{tot_prof/tot_inv*100:+.1f}%")
-
-        st.markdown("---")
-        st.markdown("#### 📋 매수 종목 전체 (1,155건)")
-
-        picks_path = CACHE / "MASTER_best_picks_2020-2026.csv"
-        if picks_path.exists():
-            picks = pd.read_csv(picks_path)
-            picks["Date"] = pd.to_datetime(picks["Date"])
-            picks["년도"] = picks["Date"].dt.year
-            picks["월"] = picks["Date"].dt.month
-
-            # 결과 분류
-            def cls(row):
-                p = row.get("peak_180d", 0)
-                if pd.isna(p): return "미정"
-                if p >= 200: return "🏆 슈퍼위너"
-                if p >= 100: return "💯 100%+"
-                if p >= 50: return "📈 50%+"
-                if p >= 10: return "✅ 10%+"
-                if row.get("ret_180d", 0) <= -20: return "❌ 손절"
-                return "💤 보합"
-            picks["결과"] = picks.apply(cls, axis=1)
-
-            # 버튼 멀티선택 - 년도
-            years_avail = sorted(picks["년도"].dropna().unique().astype(int).tolist())
-            sel_years = _button_multiselect(
-                "년도 (다중 선택)", years_avail, default=years_avail, key_prefix="bt_year")
-
-            # 버튼 멀티선택 - 월
-            months_avail = list(range(1, 13))
-            sel_months = _button_multiselect(
-                "월 (다중 선택)", months_avail, default=months_avail, key_prefix="bt_month")
-
-            # 결과 버튼 멀티선택
-            results_avail = ["🏆 슈퍼위너", "💯 100%+", "📈 50%+", "✅ 10%+", "💤 보합", "❌ 손절", "미정"]
-            sel_results = _button_multiselect(
-                "결과 (다중 선택)", results_avail,
-                default=["🏆 슈퍼위너", "💯 100%+", "📈 50%+"], key_prefix="bt_result")
-
-            # 정렬 (버튼 형)
-            sort_options = {
-                "최신 일자순": ("Date", False),
-                "오래된 일자순": ("Date", True),
-                "최고가 높은순": ("peak_180d", False),
-                "수익률 높은순": ("ret_180d", False),
-                "수익률 낮은순": ("ret_180d", True),
-                "슈퍼점수 높은순": ("SuperScore_v2", False),
-            }
-            sort_keys = list(sort_options.keys())
-
-            if "bt_sort_selected" not in st.session_state:
-                st.session_state.bt_sort_selected = "최신 일자순"
-
-            st.markdown("**정렬 기준**")
-            sort_cols = st.columns(len(sort_keys))
-            for i, sk in enumerate(sort_keys):
-                is_sel = st.session_state.bt_sort_selected == sk
-                btn_type = "primary" if is_sel else "secondary"
-                if sort_cols[i].button(sk, key=f"bt_sort_{sk}",
-                                         type=btn_type, use_container_width=True):
-                    st.session_state.bt_sort_selected = sk
-                    st.rerun()
-
-            sort_col_key, sort_asc = sort_options[st.session_state.bt_sort_selected]
-            if sort_col_key not in picks.columns:
-                sort_col_key = "Date"
-
-            filtered = picks[
-                picks["년도"].isin(sel_years) &
-                picks["월"].isin(sel_months) &
-                picks["결과"].isin(sel_results)
-            ]
-            filtered = filtered.sort_values(sort_col_key, ascending=sort_asc)
-
-            # 한글 컬럼명
-            show_map = {
-                "Date": "일자", "년도": "년도", "월": "월",
-                "Code": "종목코드", "Name": "종목명", "Market": "시장",
-                "Close": "매수가", "결과": "결과",
-                "ret_180d": "180일수익률(%)", "peak_180d": "최고가도달(%)",
-                "sell_close": "매도가", "sell_date": "매도일",
-                "SuperScore_v2": "슈퍼점수",
-                "p_sw": "슈퍼위너확률", "p_100plus": "100%+확률",
-                "p_50plus": "50%+확률", "p_loss": "손절확률",
-            }
-            show_cols = [c for c in show_map if c in filtered.columns]
-            display = filtered[show_cols].rename(columns=show_map).head(500)
-
-            # 일자 포맷
-            if "일자" in display.columns:
-                display["일자"] = pd.to_datetime(display["일자"]).dt.strftime("%Y-%m-%d")
-            # 확률 % 변환
-            for c in ["슈퍼위너확률", "100%+확률", "50%+확률", "손절확률"]:
-                if c in display.columns:
-                    display[c] = (display[c]*100).round(1).astype(str) + "%"
-
-            st.dataframe(display, hide_index=True, use_container_width=True, height=600)
-            st.caption(f"검색 결과 {len(filtered):,}건 중 최대 500건 표시")
-
-    # ========== 탭 5: 매수 룰 ==========
-    with tabs[4]:
-        st.markdown("""
-### 🎯 최종 매수 룰
+    st.markdown("""
+### 🎯 최종 매수 룰 (단순)
 
 ```
 [풀]   시총 상위 300종목 (KRX)
 [시그널] 4 프리셋 ensemble + Score ≥ 40
 [모델]  RF 4분류기 + peak 회귀
 
-[종합 점수]
+[슈퍼점수]
   슈퍼점수 = p_sw × 5 + p_100+ × 2 + p_50+ × 1 - p_loss × 3
 
 [등급 자동 부여]
-  ★ 강력매수: 점수 상위 20% + 손절확률 < 55%
-  ○ 추천:    점수 상위 20-40%
+  ★ 강력매수: 슈퍼점수 상위 20%
+  ○ 추천:    상위 20-40%
   - 관망:    중간
-  ⚠️ 손절위험: 손절확률 ≥ 55%
+  ⚠️ 손절위험: 점수 낮음 + 손절확률 ≥ 70%
 
 [매수]
-  - ★ 강력매수만 매수 (○ 추천은 옵션)
+  - ★ 강력매수만 매수
+  - 우선순위: 슈퍼점수 + 슈퍼위너 확률 종합
   - 시점: 당일 NXT 19:50 시장가 (1순위) / D+1 시초가 (2순위)
-  - 종목당 10만원 (자본 1억 기준 0.1%)
+  - 종목당 10만원 (자본 1억 → 0.1%)
+  - 주 한도 5건
 
 [매도]
   - 매수일 + 180거래일 후 정규장 종가
   - 익절/손절 룰 X
 ```
 
-### 5년 OOS (2022-2026)
-- 매수 1,155건 / 투자 1억 1,550만 → 수익 +1억 2,975만
-- 자본 1억 → **2.3억** (+112.3%)
-- 슈퍼위너 327건 (28.3%) / 손절 182건 (15.8%)
+### 5년 OOS 결과 (2022-2026)
+
+| 년도 | 매수 | 수익률 | 슈퍼위너 | 손절 |
+|---|---|---|---|---|
+| 2022 (약세) | 260 | +33.9% | 35 | 78 |
+| 2023 (박스) | 260 | +57.9% | 49 | 47 |
+| 2024 (혼조) | 265 | +68.5% | 56 | 48 |
+| **2025 (강세)** ⭐ | 265 | **+292.5%** | **153** | **4** |
+| 2026 (5월) | 105 | +97.0% | 34 | 5 |
+| **5년 누적** | **1,155** | **+112.3%** | **327** | **182** |
+
+→ 자본 1억 → **2.3억** (자본 2.3배)
 """)
 
-        st.markdown("---")
-        st.markdown("### 🔍 키움 HTS 검색식")
-        st.code("""
+    st.markdown("---")
+    st.markdown("### 🔍 키움 HTS 검색식")
+    st.code("""
 [영웅문 0150 조건검색]
 A: 시가총액 ≥ 14,000억
 B: 전일 거래대금 100억 ~ 3,000억
@@ -429,3 +482,37 @@ J: 외국인 5일 누적 순매수 > 0 (선택)
 
 조건: A AND B AND C AND D AND E AND F AND G AND H AND I
 """, language="text")
+
+    st.markdown("---")
+    st.markdown("### 📊 등급 시스템")
+    st.markdown("""
+| 등급 | 기준 | 매수 여부 |
+|---|---|---|
+| **★ 강력매수** | 슈퍼점수 상위 20% | ✅ **매수** |
+| ○ 추천 | 슈퍼점수 상위 20-40% | △ (자본 여유 시) |
+| - 관망 | 중간 | ❌ 매수 X |
+| ⚠️ 손절위험 | 점수 낮음 + 손절 ≥ 70% | ❌ 매수 절대 X |
+
+### 가능성 태그 (자동 부여)
+
+| 태그 | 기준 | 의미 |
+|---|---|---|
+| 🏆 슈퍼위너 강력후보 | 슈퍼위너 확률 ≥ 20% | peak 200%+ 매우 가능 |
+| ⭐ 슈퍼위너후보 | ≥ 10% | 슈퍼위너 가능 |
+| 💯 100%+ 가능 | 100%+ 확률 ≥ 30% | 2배 가능 |
+| 📈 50%+ 가능 | 50%+ 확률 ≥ 50% | 절반 이상 상승 가능 |
+| 🔻 손절 주의 | 손절 확률 40-70% | 변동성 주의 |
+""")
+
+
+# 기존 통합 페이지 (호환성)
+def page_superscore():
+    """기존 통합 페이지 — 좌측 메뉴로 이전됨"""
+    st.info("💎 슈퍼스코어 추천 메뉴가 좌측 메뉴로 이전되었습니다. 좌측 메뉴에서 선택하세요.")
+    cols = st.columns(3)
+    if cols[0].button("🎯 오늘의 추천", use_container_width=True):
+        st.session_state.page = "ss_today"; st.rerun()
+    if cols[1].button("📅 이번 주", use_container_width=True):
+        st.session_state.page = "ss_week"; st.rerun()
+    if cols[2].button("📊 백테스트", use_container_width=True):
+        st.session_state.page = "ss_backtest"; st.rerun()

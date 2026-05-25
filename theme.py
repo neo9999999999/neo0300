@@ -2,7 +2,7 @@
 디자인 시스템 v2 — 네이버 그린 그라데이션 + 모바일 반응형
 
 특징:
-- 메인 컬러: 네이버 그린 #03C75A (그라데이션 #00C73C → #03C75A)
+- 메인 컬러: 강렬 레드 #DC2626 (그라데이션 #EF4444 → #DC2626)
 - Pretendard 폰트 우선
 - 둥근 모서리 14px
 - 부드러운 그림자 (네이버 카드 스타일)
@@ -28,14 +28,14 @@ TOKENS = {
         "text_disabled": "#B0B8C1",
         "text_on_accent": "#FFFFFF",
         # 액센트 (네이버 그린)
-        "accent": "#03C75A",
+        "accent": "#DC2626",
         "accent_strong": "#02B255",
         "accent_dark": "#019543",
         "accent_soft": "#E8FFEF",
         "accent_softer": "#F0FFF5",
         # 그라데이션
-        "gradient_start": "#00C73C",
-        "gradient_end": "#03C75A",
+        "gradient_start": "#EF4444",
+        "gradient_end": "#DC2626",
         # 시멘틱 (한국식 빨강↑/파랑↓)
         "up": "#F04452",
         "up_soft": "#FFEEEF",
@@ -57,13 +57,13 @@ TOKENS = {
         "text_3": "#7D8590",
         "text_disabled": "#484F58",
         "text_on_accent": "#FFFFFF",
-        "accent": "#03C75A",
+        "accent": "#DC2626",
         "accent_strong": "#04D466",
         "accent_dark": "#02B255",
         "accent_soft": "#0E2F1A",
         "accent_softer": "#0A2014",
         "gradient_start": "#04D466",
-        "gradient_end": "#03C75A",
+        "gradient_end": "#DC2626",
         "up": "#FF6B6B",
         "up_soft": "#3A1E22",
         "down": "#5BA5FF",

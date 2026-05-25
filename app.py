@@ -98,7 +98,7 @@ _check_password()
 
 # ===== 세션 디폴트 =====
 DEFAULTS = {
-    "page": "superscore",
+    "page": "ss_today",
     "theme": "light",
     "preset": "default",
     "trade_type": "전체",
@@ -129,11 +129,12 @@ with st.sidebar:
     st.markdown(get_logo_html(st.session_state.theme), unsafe_allow_html=True)
 
     PAGES = [
-        ("💎 SuperScore 추천 (최신)", "superscore"),
-        ("오늘의 종가매수 추천", "today"),
-        ("백테스트 결과", "results"),
-        ("사례 & 가이드", "library"),
-        ("⚙️ 어드민 설정", "admin"),
+        ("🎯 오늘의 추천", "ss_today"),
+        ("📅 이번 주", "ss_week"),
+        ("🗓️ 지난 주", "ss_last_week"),
+        ("📊 백테스트", "ss_backtest"),
+        ("🔍 추천 사례 검증", "ss_case"),
+        ("📋 매수 룰", "ss_rule"),
     ]
     for label, key in PAGES:
         btn_type = "primary" if st.session_state.page == key else "secondary"
@@ -4109,19 +4110,22 @@ def page_admin():
 # 라우팅
 # =============================================================================
 try:
-    from page_superscore import page_superscore
+    from page_superscore import (
+        page_today_pick, page_this_week, page_last_week,
+        page_backtest, page_case_validation, page_buy_rule,
+    )
 except Exception as _e:
-    def page_superscore():
-        st.error(f"SuperScore 페이지 로드 실패: {_e}")
+    def _err(): st.error(f"페이지 로드 실패: {_e}")
+    page_today_pick = page_this_week = page_last_week = page_backtest = page_case_validation = page_buy_rule = _err
 
 ROUTES = {
-    "superscore": page_superscore,
-    "today": page_today,
-    "results": page_results,
-    "library": page_library,
-    "admin": page_admin,
+    "ss_today": page_today_pick,
+    "ss_week": page_this_week,
+    "ss_last_week": page_last_week,
+    "ss_backtest": page_backtest,
+    "ss_case": page_case_validation,
+    "ss_rule": page_buy_rule,
 }
-# 기본 페이지를 superscore로 변경
 if "page" not in st.session_state or st.session_state.page not in ROUTES:
-    st.session_state.page = "superscore"
-ROUTES.get(st.session_state.page, page_superscore)()
+    st.session_state.page = "ss_today"
+ROUTES.get(st.session_state.page, page_today_pick)()
