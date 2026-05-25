@@ -183,6 +183,7 @@ def _find_similar_stocks(target_row, n: int = 5, exclude_code: str = None) -> pd
 
 def _peak_color(v):
     if pd.isna(v): return "#9CA3AF"
+    if v >= 1000: return "#000000"   # 10배 이상 — 블랙
     if v >= 200: return "#B91C1C"
     if v >= 100: return "#DC2626"
     if v >= 50:  return "#F97316"
@@ -192,8 +193,9 @@ def _peak_color(v):
 
 
 def _ret_color(v):
-    """한국식: + 상승 빨강, - 하락 파랑. -5~+5% 보합(회색)"""
+    """한국식: + 상승 빨강, - 하락 파랑. 1000%↑ 블랙(특별). -5~+5% 보합(회색)"""
     if pd.isna(v): return "#9CA3AF"
+    if v >= 1000: return "#000000"   # 블랙 (10배 이상 — 슈퍼슈퍼위너)
     if v >= 100:  return "#7F1D1D"   # 진빨강 (대박)
     if v >= 30:   return "#B91C1C"   # 진빨강
     if v >= 10:   return "#DC2626"   # 빨강
@@ -1231,9 +1233,10 @@ def page_backtest():
         return ""
 
     def _return_style(val):
-        """한국식: + 빨강 / - 파랑.  -5%~+5% 보합(회색)"""
+        """한국식: + 빨강 / - 파랑.  -5%~+5% 보합(회색).  1000%↑ 블랙"""
         try:
             v = float(val)
+            if v >= 1000: return "color:#000000;font-weight:900;"   # 10배 이상 — 블랙
             if v >= 100:  return "color:#7F1D1D;font-weight:800;"
             if v >= 30:   return "color:#B91C1C;font-weight:700;"
             if v >= 10:   return "color:#DC2626;font-weight:700;"
