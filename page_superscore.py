@@ -18,10 +18,11 @@ CACHE = Path("cache")
 
 
 def _grade_color(grade: str) -> str:
-    if "강력매수" in grade: return "#DC2626"  # 강렬한 빨강 (Red 600)
-    if "추천" in grade: return "#F97316"  # 주황 (Orange 500)
-    if "관망" in grade: return "#9CA3AF"  # 회색
-    if "손절위험" in grade: return "#7F1D1D"  # 진한 다크 레드 (Red 900)
+    if "슈퍼 강력매수" in grade: return "#B91C1C"  # 진한 빨강 (Red 700)
+    if "강력매수" in grade: return "#F97316"  # 주황 (Orange 500)
+    if "추천" in grade: return "#F59E0B"  # 호박색
+    if "관망" in grade: return "#9CA3AF"
+    if "손절위험" in grade: return "#7F1D1D"
     return "#6B7280"
 
 
@@ -166,13 +167,15 @@ def _load_json():
 
 
 def _sort_strong(picks_list):
-    strong = [p for p in picks_list if p.get("등급") == "★ 강력매수"]
+    """슈퍼강력 + 강력매수만 (그 외 제외) - 슈퍼강력 먼저, 그 안에서 점수순"""
+    buyable = [p for p in picks_list if p.get("등급") in ("🔥 슈퍼 강력매수", "★ 강력매수")]
     def priority(p):
+        grade_bonus = 100 if "슈퍼" in p.get("등급", "") else 0
         ss = p.get("SuperScore", 0) or 0
         psw = p.get("슈퍼위너확률%", 0) or 0
-        return ss * 0.5 + psw * 0.01
-    strong.sort(key=priority, reverse=True)
-    return strong
+        return grade_bonus + ss * 0.5 + psw * 0.01
+    buyable.sort(key=priority, reverse=True)
+    return buyable
 
 
 # ============ 좌측 메뉴 페이지들 ============
@@ -201,11 +204,11 @@ def page_today_pick():
             _render_pick_card(pd.Series(p), show_similar=True)
 
 
-def _render_weekly_by_day(picks_list, week_limit=5):
-    """일자별 그룹화 + 선착순 매수 (실전 룰: 매일 발견 즉시 매수, 주 누적 한도)"""
-    strong = [p for p in picks_list if p.get("등급") == "★ 강력매수"]
+def _render_weekly_by_day(picks_list, week_limit=999):
+    """일자별 그룹화 + 선착순 매수 (슈퍼강력 + 강력매수만)"""
+    strong = [p for p in picks_list if p.get("등급") in ("🔥 슈퍼 강력매수", "★ 강력매수")]
     if len(strong) == 0:
-        st.info("★ 강력매수 종목 없음")
+        st.info("🔥 슈퍼 강력매수 / ★ 강력매수 종목 없음")
         return
 
     # 일자별 그룹화
@@ -224,8 +227,11 @@ def _render_weekly_by_day(picks_list, week_limit=5):
     buy_n = 0
     for d in dates_sorted:
         day_picks = by_day[d]
-        # 같은 일 내 슈퍼점수 정렬 (그날 발견된 종목 중에서)
-        day_picks.sort(key=lambda p: (p.get("SuperScore", 0) or 0) * 0.5 + (p.get("슈퍼위너확률%", 0) or 0) * 0.01, reverse=True)
+        # 같은 일 내: 슈퍼강력 먼저, 그 안에서 점수 순
+        def pri(p):
+            bonus = 100 if "슈퍼" in p.get("등급","") else 0
+            return bonus + (p.get("SuperScore",0) or 0)*0.5 + (p.get("슈퍼위너확률%",0) or 0)*0.01
+        day_picks.sort(key=pri, reverse=True)
         for p in day_picks:
             cumulative += 1
             p["_seq"] = cumulative   # 순서 번호 (전체)
@@ -440,13 +446,13 @@ def page_backtest():
 def page_case_validation():
     """🔍 추천 사례 검증 (현재 추천 종목들의 과거 성과)"""
     st.markdown('<h1>🔍 추천 사례 검증</h1>', unsafe_allow_html=True)
-    st.caption("현재 추천 종목들의 과거 5년 매수 사례 검증")
+    st.caption("현재 🔥 슈퍼 강력매수 / ★ 강력매수 종목들의 과거 5년 매수 사례 검증")
 
     data = _load_json()
     picks_all = []
     for key in ["today","week","last_week"]:
         for p in data.get(key, {}).get("picks", []):
-            if p.get("등급") == "★ 강력매수":
+            if p.get("등급") in ("🔥 슈퍼 강력매수", "★ 강력매수"):
                 p_ = dict(p); p_["기간"] = {"today":"오늘","week":"이번주","last_week":"지난주"}[key]
                 picks_all.append(p_)
 
@@ -458,9 +464,9 @@ def page_case_validation():
             seen.add(p["Code"]); uniq.append(p)
 
     if len(uniq) == 0:
-        st.info("현재 ★ 강력매수 종목 없음"); return
+        st.info("현재 슈퍼강력/강력매수 종목 없음"); return
 
-    st.markdown(f"### ★ 강력매수 종목 {len(uniq)}개의 과거 매수 사례")
+    st.markdown(f"### 매수 후보 {len(uniq)}개의 과거 매수 사례")
 
     for p in uniq:
         code = p["Code"]; name = p["Name"]
@@ -518,34 +524,43 @@ def page_buy_rule():
 [슈퍼점수]
   슈퍼점수 = p_sw × 5 + p_100+ × 2 + p_50+ × 1 - p_loss × 3
 
-[등급 자동 부여]
-  ★ 강력매수: 슈퍼점수 상위 20%
-  ○ 추천:    상위 20-40%
-  - 관망:    중간
-  ⚠️ 손절위험: 점수 낮음 + 손절확률 ≥ 70%
+[등급 자동 부여 - 2단계만]
+  🔥 슈퍼 강력매수: 슈퍼점수 상위 5%  (일 2-3건)
+  ★ 강력매수:    슈퍼점수 상위 5-20% (일 3-5건)
+  (그 외 등급은 매수 X, 표시 안 함)
 
-[매수]
-  - ★ 강력매수만 매수
-  - 우선순위: 슈퍼점수 + 슈퍼위너 확률 종합
-  - 시점: 당일 NXT 19:50 시장가 (1순위) / D+1 시초가 (2순위)
-  - 종목당 10만원 (자본 1억 → 0.1%)
-  - 주 한도 5건
+[매수 우선순위]
+  1순위: 🔥 슈퍼 강력매수 (점수 높은 순)
+  2순위: ★ 강력매수 (점수 + 슈퍼위너 확률)
+  시점: 당일 NXT 19:50 시장가 (1순위) / D+1 시초가 (2순위)
+  종목당 10만원
 
 [매도]
   - 매수일 + 180거래일 후 정규장 종가
   - 익절/손절 룰 X
 ```
 
-### 5년 OOS 결과 (2022-2026)
+### 등급별 OOS 성과 (5년)
 
-| 년도 | 매수 | 수익률 | 슈퍼위너 | 손절 |
-|---|---|---|---|---|
-| 2022 (약세) | 260 | +33.9% | 35 | 78 |
-| 2023 (박스) | 260 | +57.9% | 49 | 47 |
-| 2024 (혼조) | 265 | +68.5% | 56 | 48 |
-| **2025 (강세)** ⭐ | 265 | **+292.5%** | **153** | **4** |
-| 2026 (5월) | 105 | +97.0% | 34 | 5 |
-| **5년 누적** | **1,155** | **+112.3%** | **327** | **182** |
+| 등급 | 일평균 | 매수 (5년) | SW% | 손절% | **수익률** |
+|---|---|---|---|---|---|
+| **🔥 슈퍼 강력매수** (상위 5%) | 2.3건 | 1,865 | **28.6%** | **11.4%** | **+109.0%** |
+| **★ 강력매수** (상위 5-20%) | ~3건 | ~2,437 | ~15% | ~13% | ~+75% |
+| 합계 (모두 매수) | ~5건 | 4,302 | 19.9% | 12.5% | +88.0% |
+
+→ **🔥 슈퍼 강력매수**가 농도/효율 최강 (자본 부족하면 이것만)
+→ **★ 강력매수**는 보완 (자본 충분할 때 둘 다)
+
+### 5년 OOS 결과 (모두 매수, 자본 1억 가정)
+
+| 년도 | 시장 | 매수 | 수익률 |
+|---|---|---|---|
+| 2022 (약세) | -25% | 260 | +33.9% |
+| 2023 (박스) | +18% | 260 | +57.9% |
+| 2024 (혼조) | +9% | 265 | +68.5% |
+| **2025 (강세)** ⭐ | +35% | 265 | **+292.5%** |
+| 2026 (5월) | +12% | 105 | +97.0% |
+| **5년 누적** | | **1,155** | **+112.3%** |
 
 → 자본 1억 → **2.3억** (자본 2.3배)
 """)

@@ -185,26 +185,20 @@ def compute_supabilities(df, sd, cur):
     df["StrongScore"] = (df["p_sw"]*3 + df["p_100plus"]*1.5 + df["p_50plus"]*1 - df["p_loss"]*2).round(2)
     df["SuperScore"] = (df["p_sw"]*5 + df["p_100plus"]*2 + df["p_50plus"]*1 - df["p_loss"]*3).round(2)
 
-    # 등급 부여 — 점수 우선, 손절확률은 보조 (점수 상위면 손절확률 무관)
+    # 등급 부여 - 슈퍼강력매수(상위 5%) + 강력매수(상위 5-20%)만
     df["_score_pct"] = df.groupby(df["Date"].dt.strftime("%Y-%m-%d"))["SuperScore"].rank(pct=True)
     grades = []
     for _, r in df.iterrows():
         score_pct = r["_score_pct"]
-        p_loss = r["p_loss"]
-        p_sw = r["p_sw"]
-
-        # 점수 상위 20% → 무조건 ★ 강력매수 (슈퍼위너 가능성 ↑)
-        if score_pct >= 0.80:
+        # 점수 상위 5% → 🔥 슈퍼 강력매수 (T2)
+        if score_pct >= 0.95:
+            grades.append("🔥 슈퍼 강력매수")
+        # 점수 상위 5-20% → ★ 강력매수
+        elif score_pct >= 0.80:
             grades.append("★ 강력매수")
-        # 점수 상위 20-40% → ○ 추천
-        elif score_pct >= 0.60:
-            grades.append("○ 추천")
-        # 점수 낮음 + 손절확률 매우 높음 (70%+) → ⚠️ 손절위험
-        elif p_loss >= 0.70:
-            grades.append("⚠️ 손절위험")
-        # 나머지 → - 관망
+        # 그 외 → 무시 (표시 X)
         else:
-            grades.append("- 관망")
+            grades.append("- 일반")
     df["등급"] = grades
 
     # 가능성 태그
