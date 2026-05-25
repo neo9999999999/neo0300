@@ -11,6 +11,7 @@ SuperScore 추천 페이지들 (좌측 메뉴별 분리)
 
 import streamlit as st
 import pandas as pd
+import numpy as np
 import json
 from pathlib import Path
 
@@ -27,12 +28,71 @@ def _grade_color(grade: str) -> str:
 
 
 def _find_similar_cases(code: str, n: int = 5) -> pd.DataFrame:
+    """같은 종목 과거 사례"""
     path = CACHE / "MASTER_best_picks_2020-2026.csv"
     if not path.exists(): return pd.DataFrame()
     hist = pd.read_csv(path)
     hist["Date"] = pd.to_datetime(hist["Date"])
     same = hist[hist["Code"].astype(str) == str(code)].copy()
     return same.sort_values("Date", ascending=False).head(n)
+
+
+def _find_similar_stocks(target_row, n: int = 5, exclude_code: str = None) -> pd.DataFrame:
+    """다른 종목 중 변수 비슷한 과거 매수 사례 (유클리드 거리)"""
+    path = CACHE / "MASTER_best_picks_2020-2026.csv"
+    if not path.exists(): return pd.DataFrame()
+    hist = pd.read_csv(path)
+    hist["Date"] = pd.to_datetime(hist["Date"])
+
+    # 자기 자신 제외
+    if exclude_code:
+        hist = hist[hist["Code"].astype(str) != str(exclude_code)].copy()
+
+    # 비교 변수
+    var_cols = ["p_sw", "p_100plus", "p_50plus", "p_loss"]
+    var_cols = [c for c in var_cols if c in hist.columns]
+    if not var_cols:
+        return pd.DataFrame()
+
+    # 결측 제거
+    hist = hist.dropna(subset=var_cols).copy()
+    if len(hist) == 0: return pd.DataFrame()
+
+    # 타깃 값
+    target_vals = []
+    for c in var_cols:
+        # 0~1 (p_*) or %, 페이지에서 받은 row는 % (슈퍼위너확률% 등)
+        v_raw = target_row.get(c, None)
+        if v_raw is None:
+            # 확률% 컬럼에서 변환
+            pct_col = {"p_sw":"슈퍼위너확률%","p_100plus":"100%+확률","p_50plus":"50%+확률","p_loss":"손절확률%"}.get(c)
+            if pct_col and pct_col in target_row.index:
+                try:
+                    v_raw = float(target_row[pct_col]) / 100
+                except Exception:
+                    v_raw = 0
+            else: v_raw = 0
+        target_vals.append(float(v_raw) if v_raw is not None else 0)
+
+    # 유클리드 거리
+    diff_sq = np.zeros(len(hist))
+    for i, c in enumerate(var_cols):
+        diff_sq += (hist[c].values - target_vals[i])**2
+    hist["_distance"] = np.sqrt(diff_sq)
+
+    # 가장 가까운 N건 (단 같은 일자 중복 제거)
+    similar = hist.sort_values("_distance").drop_duplicates(["Date","Code"]).head(n*3)
+    # 다른 종목 위주 (동일 종목 너무 중복 안 되게)
+    seen_codes = set()
+    pick = []
+    for _, r in similar.iterrows():
+        c = str(r["Code"])
+        if c in seen_codes: continue
+        seen_codes.add(c)
+        pick.append(r)
+        if len(pick) >= n: break
+    if not pick: return pd.DataFrame()
+    return pd.DataFrame(pick)
 
 
 def _reason_text(row: pd.Series) -> list:
@@ -118,10 +178,11 @@ def _render_pick_card(row: pd.Series, show_similar: bool = True):
                 st.markdown(f"- {r}")
 
     if show_similar:
-        similar = _find_similar_cases(code, n=5)
-        if len(similar) > 0:
-            with st.expander(f"🔍 {name} 과거 매수 사례 ({len(similar)}건)", expanded=False):
-                hist_show = similar[[c for c in ["Date","Close","sell_close","ret_180d","peak_180d"] if c in similar.columns]].copy()
+        # 1) 같은 종목 과거 사례
+        similar_same = _find_similar_cases(code, n=5)
+        if len(similar_same) > 0:
+            with st.expander(f"🔍 {name} 과거 매수 사례 ({len(similar_same)}건)", expanded=False):
+                hist_show = similar_same[[c for c in ["Date","Close","sell_close","ret_180d","peak_180d"] if c in similar_same.columns]].copy()
                 hist_show = hist_show.rename(columns={
                     "Date":"발생일","Close":"매수가","sell_close":"매도가",
                     "ret_180d":"180일 수익률(%)","peak_180d":"최고가 도달(%)"
@@ -133,11 +194,39 @@ def _render_pick_card(row: pd.Series, show_similar: bool = True):
                         hist_show[c] = hist_show[c].round(1)
                 st.dataframe(hist_show, hide_index=True, use_container_width=True)
 
-                if "peak_180d" in similar.columns:
-                    avg_peak = similar["peak_180d"].mean()
-                    sw_count = (similar["peak_180d"]>=200).sum()
-                    w100_count = (similar["peak_180d"]>=100).sum()
+                if "peak_180d" in similar_same.columns:
+                    avg_peak = similar_same["peak_180d"].mean()
+                    sw_count = (similar_same["peak_180d"]>=200).sum()
+                    w100_count = (similar_same["peak_180d"]>=100).sum()
                     st.caption(f"📊 평균 최고가: +{avg_peak:.0f}% · 슈퍼위너 {sw_count}건 · 100%+ {w100_count}건")
+
+        # 2) 비슷한 패턴의 다른 종목들 (유사도 기반)
+        similar_other = _find_similar_stocks(row, n=5, exclude_code=code)
+        if len(similar_other) > 0:
+            with st.expander(f"🎭 {name} 와 비슷한 패턴 종목 ({len(similar_other)}건)", expanded=False):
+                show = similar_other[[c for c in ["Date","Code","Name","Market","Close","sell_close","ret_180d","peak_180d","p_sw","p_loss"] if c in similar_other.columns]].copy()
+                show = show.rename(columns={
+                    "Date":"발생일","Code":"종목코드","Name":"종목명","Market":"시장",
+                    "Close":"매수가","sell_close":"매도가",
+                    "ret_180d":"180일수익률(%)","peak_180d":"최고가도달(%)",
+                    "p_sw":"슈퍼위너확률","p_loss":"손절확률"
+                })
+                if "발생일" in show.columns:
+                    show["발생일"] = pd.to_datetime(show["발생일"]).dt.strftime("%Y-%m-%d")
+                for c in ["180일수익률(%)","최고가도달(%)"]:
+                    if c in show.columns:
+                        show[c] = show[c].round(1)
+                for c in ["슈퍼위너확률","손절확률"]:
+                    if c in show.columns:
+                        show[c] = (show[c]*100).round(0).astype(str) + "%"
+                st.dataframe(show, hide_index=True, use_container_width=True)
+
+                avg_peak_o = similar_other["peak_180d"].mean()
+                sw_count_o = (similar_other["peak_180d"]>=200).sum()
+                w100_count_o = (similar_other["peak_180d"]>=100).sum()
+                loss_count_o = (similar_other["ret_180d"]<=-20).sum()
+                st.caption(f"📊 유사 패턴 평균 최고가: +{avg_peak_o:.0f}% · 슈퍼위너 {sw_count_o}건 · 100%+ {w100_count_o}건 · 손절 {loss_count_o}건")
+                st.caption("💡 슈퍼위너/100%+/50%+/손절 확률이 비슷한 다른 종목의 과거 매수 결과")
 
 
 def _button_multiselect(label: str, options: list, default: list, key_prefix: str):
