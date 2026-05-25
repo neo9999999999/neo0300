@@ -570,60 +570,62 @@ def _render_pick_card(row: pd.Series, show_similar: bool = True):
         # main_strength 도 이모지 제거
         main_strength = _clean(main_strength).replace("도달", "").strip()
 
-    # ===== 카드 HTML (단순) =====
+    # ===== 카드 HTML (차분) =====
     ploss_col = "#DC2626" if ploss >= 25 else "#10B981"
+    bar_width = max(2, min(100, main_prob))
     # 현재 수익률 배지 (매수일 이후 경과 시에만)
     cur_html = ""
     if cur_ret is not None and pd.notna(cur_ret):
         cret_col = _ret_color(cur_ret)
         cur_html = (
-            f'<div style="display:inline-block;background:{cret_col};color:white;'
-            f'padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700;margin-left:8px;">'
+            f'<div style="display:inline-block;color:{cret_col};font-size:12px;font-weight:700;margin-top:4px;">'
             f'현재 {cur_ret:+.1f}% ({cur_price:,.0f}원)</div>'
         )
-    st.markdown(f"""
-<div style="border:1px solid {main_color}40;background:white;
-            border-radius:12px;margin-bottom:14px;overflow:hidden;
-            box-shadow:0 2px 8px {main_color}1a;">
-
-  <!-- 한 줄 헤더: 종목명 + 매수가 -->
-  <div style="padding:14px 20px 10px 20px;display:flex;justify-content:space-between;align-items:flex-start;">
-    <div style="flex:1;">
-      <div style="display:flex;align-items:center;gap:10px;">
-        <span style="background:{color};color:white;padding:3px 10px;border-radius:4px;
-                     font-size:10px;font-weight:700;letter-spacing:1px;">{grade}</span>
-        <span style="font-size:20px;font-weight:800;color:#111;">{name}</span>
-        <span style="font-size:11px;color:#9CA3AF;">{code} · {market} · {date}</span>
-      </div>
-      <div style="font-size:12px;color:#4B5563;margin-top:6px;line-height:1.4;">
-        {summary}
-      </div>
-    </div>
-    <div style="text-align:right;">
-      <div style="font-size:9px;color:#9CA3AF;letter-spacing:1px;">매수가</div>
-      <div style="font-size:18px;font-weight:800;color:#111;">{close:,.0f}원</div>
-      {cur_html}
-    </div>
-  </div>
-
-  <!-- 메인 % 블록 -->
-  <div style="background:{main_color};color:white;padding:18px 20px;text-align:center;">
-    <div style="font-size:10px;letter-spacing:3px;opacity:0.8;">{main_label} 가능성</div>
-    <div style="font-size:64px;font-weight:900;line-height:1;margin:4px 0;">
-      {main_prob:.0f}<span style="font-size:32px;opacity:0.95;">%</span>
-    </div>
-    {f'<div style="font-size:11px;opacity:0.9;letter-spacing:2px;">{main_strength}</div>' if main_strength else ''}
-  </div>
-
-  <!-- 푸터: 손절 + 슈퍼점수 -->
-  <div style="padding:8px 20px;display:flex;justify-content:space-between;
-              background:#FAFAFA;border-top:1px solid #F3F4F6;font-size:11px;color:#6B7280;">
-    <span>예상 최고가 <b style="color:{main_color};margin-left:4px;">+{peak_pred:.0f}%</b></span>
-    <span>슈퍼점수 <b style="color:#111;margin-left:4px;">{ss:.2f}</b></span>
-    <span>손절 확률 <b style="color:{ploss_col};margin-left:4px;">{ploss:.0f}%</b></span>
-  </div>
-</div>
-""", unsafe_allow_html=True)
+    strength_html = (
+        f'<span style="color:{main_color};font-size:11px;font-weight:700;margin-left:6px;">{main_strength}</span>'
+        if main_strength else ""
+    )
+    card_html = (
+        f'<div style="border:1px solid #E5E7EB;background:white;border-radius:10px;'
+        f'margin-bottom:12px;padding:14px 18px;">'
+        # 헤더: 등급 + 종목명 + 매수가 (한 줄)
+        f'<div style="display:flex;justify-content:space-between;align-items:flex-start;">'
+        f'<div style="flex:1;">'
+        f'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
+        f'<span style="background:{color};color:white;padding:2px 10px;border-radius:4px;'
+        f'font-size:10px;font-weight:700;letter-spacing:1px;">{grade}</span>'
+        f'<span style="font-size:18px;font-weight:800;color:#111;">{name}</span>'
+        f'<span style="font-size:11px;color:#9CA3AF;">{code} · {market} · {date}</span>'
+        f'</div>'
+        f'<div style="font-size:12px;color:#4B5563;margin-top:4px;">{summary}</div>'
+        f'</div>'
+        f'<div style="text-align:right;">'
+        f'<div style="font-size:9px;color:#9CA3AF;letter-spacing:1px;">매수가</div>'
+        f'<div style="font-size:16px;font-weight:700;color:#111;">{close:,.0f}원</div>'
+        f'{cur_html}'
+        f'</div></div>'
+        # 메인 — 컬러 진행바 + 우측 % 숫자 (차분)
+        f'<div style="margin-top:14px;display:flex;align-items:center;gap:14px;">'
+        f'<div style="flex:1;">'
+        f'<div style="font-size:11px;color:#6B7280;margin-bottom:4px;font-weight:600;">'
+        f'{main_label} 가능성{strength_html}</div>'
+        f'<div style="background:#F3F4F6;border-radius:8px;height:14px;overflow:hidden;">'
+        f'<div style="background:{main_color};width:{bar_width}%;height:100%;'
+        f'border-radius:8px;transition:width 0.3s;"></div>'
+        f'</div></div>'
+        f'<div style="font-size:34px;font-weight:900;color:{main_color};line-height:1;min-width:80px;text-align:right;">'
+        f'{main_prob:.0f}<span style="font-size:18px;font-weight:700;">%</span>'
+        f'</div></div>'
+        # 푸터
+        f'<div style="margin-top:12px;padding-top:10px;border-top:1px solid #F3F4F6;'
+        f'display:flex;justify-content:space-between;font-size:11px;color:#6B7280;">'
+        f'<span>예상 최고가 <b style="color:{main_color};margin-left:4px;">+{peak_pred:.0f}%</b></span>'
+        f'<span>슈퍼점수 <b style="color:#111;margin-left:4px;">{ss:.2f}</b></span>'
+        f'<span>손절 확률 <b style="color:{ploss_col};margin-left:4px;">{ploss:.0f}%</b></span>'
+        f'</div>'
+        f'</div>'
+    )
+    st.markdown(card_html, unsafe_allow_html=True)
 
     with st.expander(f"{name} — 도달 구간별 OOS 적중 확률", expanded=False):
         st.caption("실제 5년 백테스트(825건) 기반 보정 확률")
