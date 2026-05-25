@@ -207,6 +207,7 @@ def _ret_color(v):
 
 def _peak_label_plain(v):
     if pd.isna(v): return "—"
+    if v >= 1000: return "텐베거"
     if v >= 200: return "SW"
     if v >= 100: return "100+"
     if v >= 50:  return "50+"
@@ -993,18 +994,18 @@ def page_backtest():
         "단기 폭등 종목이 추출된 건 모델이 의도한 슈퍼위너 발굴 효과."
     )
 
-    # 결과 분류 = 실제 매도가 수익률(ret_180d) 기준
-    # 손절: -5% 이하 / 보합: -5% < r < 5% / 소폭익절: 5~10% / 그 이상 등급별
+    # 결과 분류 — 매도 실현 수익률 기준
     def cls(row):
         r = row.get("ret_180d")
         if pd.isna(r): return "미정"
+        if r >= 1000: return "텐베거"     # 10배 이상 (block black)
         if r >= 200: return "슈퍼위너"
         if r >= 100: return "100%+"
         if r >= 50:  return "50%+"
         if r >= 10:  return "10%+"
-        if r >= 5:   return "소폭익절"   # +5 ~ +10%
-        if r > -5:   return "보합"        # -5% < r < +5%
-        return "손절"                     # -5% 이하
+        if r >= 5:   return "소폭익절"
+        if r > -5:   return "보합"
+        return "손절"
     picks["결과"] = picks.apply(cls, axis=1)
 
     # === 종목당 매수 금액 입력 (만원) — 단일 session_state 키로 통합 ===
@@ -1100,12 +1101,14 @@ def page_backtest():
         avg_peak = filtered["peak_180d"].mean()
         total_profit = filtered["수익금_만원"].sum()
         invest_amount = n * buy_amount_man  # 종목당 매수금 × 건수
+        ten_n  = int((filtered["ret_180d"]>=1000).sum())
         sw_n   = int((filtered["ret_180d"]>=200).sum())
         p100_n = int((filtered["ret_180d"]>=100).sum())
         p50_n  = int((filtered["ret_180d"]>=50).sum())
         p10_n  = int((filtered["ret_180d"]>=10).sum())
         win_n  = int((filtered["ret_180d"]>0).sum())
         loss_n = int((filtered["ret_180d"]<=-5).sum())
+        ten_peak = int((filtered["peak_180d"]>=1000).sum())
         sw_peak = int((filtered["peak_180d"]>=200).sum())
         p100_peak = int((filtered["peak_180d"]>=100).sum())
         p50_peak = int((filtered["peak_180d"]>=50).sum())
@@ -1146,7 +1149,12 @@ def page_backtest():
   <div style="font-size:11px;color:#6B7280;font-weight:700;letter-spacing:1px;margin-bottom:6px;">
     매도(180일 종가) 실현 단계별 도달 — 실현 수익 기준
   </div>
-  <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px;text-align:center;">
+  <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;text-align:center;">
+    <div style="padding:6px;background:#000000;border-radius:6px;">
+      <div style="font-size:10px;color:#FFD700;font-weight:700;">텐베거 1000%+</div>
+      <div style="font-size:18px;font-weight:900;color:#FFD700;">{ten_n}<span style="font-size:11px;color:#9CA3AF;font-weight:600;">건 · {pct(ten_n)}</span></div>
+      <div style="font-size:9px;color:#9CA3AF;">고점 {ten_peak}건 도달</div>
+    </div>
     <div style="padding:6px;background:#FEE2E2;border-radius:6px;">
       <div style="font-size:10px;color:#7F1D1D;font-weight:700;">슈퍼위너 200%+</div>
       <div style="font-size:18px;font-weight:900;color:#7F1D1D;">{sw_n}<span style="font-size:11px;color:#6B7280;font-weight:600;">건 · {pct(sw_n)}</span></div>
@@ -1211,9 +1219,10 @@ def page_backtest():
     for c in ["수익률","최고가"]:
         if c in display.columns: display[c] = display[c].round(0)
 
-    # 결과 컬럼 색상 (한국식: 양수 빨강 / 음수 파랑) — ret_180d 기준
+    # 결과 컬럼 색상 (한국식: + 빨강 / - 파랑 / 10배 블랙)
     def _result_style(val):
         cmap = {
+            "텐베거":    "background-color:#000000;color:#FFD700;font-weight:900;",  # 블랙+골드
             "슈퍼위너":  "background-color:#7F1D1D;color:white;font-weight:700;",
             "100%+":    "background-color:#B91C1C;color:white;font-weight:700;",
             "50%+":     "background-color:#DC2626;color:white;font-weight:700;",
