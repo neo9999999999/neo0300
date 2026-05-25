@@ -128,6 +128,8 @@ def _find_similar_stocks(target_row, n: int = 5, exclude_code: str = None) -> pd
 
     # 시그널 풀에서 결과 있는 것만 (백테스트 결과 머지)
     pool = sigs[sigs["Code"].isin(master["Code"].unique())].copy()
+    # 컬럼 충돌 방지 — sigs에 이미 peak_180d/ret_180d/sell_close 있으면 drop
+    pool = pool.drop(columns=["peak_180d","ret_180d","sell_close"], errors="ignore")
     pool = pool.merge(master_keys.reset_index()[["Date","Code","peak_180d","ret_180d","sell_close"]],
                        on=["Date","Code"], how="inner")
     if exclude_code:
@@ -469,6 +471,106 @@ def _render_similar_summary(similar_df: pd.DataFrame, label: str = "평균"):
 
 # ============== 메인 카드 (이모지 0, 면처리 강조 %) ==============
 
+def _render_fundamentals_inline(row: pd.Series, accent_color: str) -> str:
+    """카드 안에 인라인으로 들어갈 기업분석 (펼치기 없이) — 한 줄 HTML 반환"""
+    rev_24 = row.get("매출_2024"); rev_25 = row.get("매출_2025")
+    op_24 = row.get("영업이익_2024"); op_25 = row.get("영업이익_2025")
+    om_24 = row.get("영업이익률_2024"); om_25 = row.get("영업이익률_2025")
+    rev_yoy = row.get("매출_YoY"); op_yoy = row.get("영업이익_YoY")
+    om_diff = row.get("영업이익률_변화")
+    per = row.get("PER_최신") or row.get("PER_num")
+    pbr = row.get("PBR_최신") or row.get("PBR_num")
+    roe = row.get("ROE_최신")
+    fgnr = row.get("외인소진율_num")
+    grade_raw = row.get("성장등급", "")
+    grade_g = _clean(grade_raw)
+
+    # 데이터 부족이면 비반환
+    if (rev_25 is None or (isinstance(rev_25,float) and pd.isna(rev_25))) and \
+       (op_25 is None or (isinstance(op_25,float) and pd.isna(op_25))):
+        return ""
+
+    grade_colors = {
+        "폭발적 성장":"#10B981","성장중":"#22C55E","보합":"#9CA3AF",
+        "둔화":"#F59E0B","역성장":"#DC2626",
+    }
+    g_col = grade_colors.get(grade_g, "#6B7280")
+
+    def _wonfmt(v):
+        if v is None or pd.isna(v): return "—"
+        try:
+            if abs(v) >= 1e4: return f"{v/1e4:,.1f}조"
+            return f"{v:,.0f}억"
+        except Exception: return "—"
+
+    def _yoy_html(v, suffix="%"):
+        if v is None or pd.isna(v): return ""
+        c = "#10B981" if v > 0 else "#DC2626"
+        return f'<span style="color:{c};font-weight:700;margin-left:4px;">YoY {v:+.1f}{suffix}</span>'
+
+    def _per_eval(v):
+        if v is None or pd.isna(v): return "—", "#9CA3AF"
+        try: v = float(v)
+        except: return "—", "#9CA3AF"
+        if v < 0: return f"{v:.1f}(적자)", "#DC2626"
+        if v < 10: return f"{v:.1f}(저평가)", "#10B981"
+        if v < 20: return f"{v:.1f}(보통)", "#6B7280"
+        return f"{v:.1f}(고평가)", "#F59E0B"
+    def _pbr_eval(v):
+        if v is None or pd.isna(v): return "—", "#9CA3AF"
+        try: v = float(v)
+        except: return "—", "#9CA3AF"
+        if v < 1: return f"{v:.2f}(저평가)", "#10B981"
+        if v < 2: return f"{v:.2f}(보통)", "#6B7280"
+        return f"{v:.2f}(고평가)", "#F59E0B"
+
+    per_txt, per_c = _per_eval(per)
+    pbr_txt, pbr_c = _pbr_eval(pbr)
+    roe_txt = "—"
+    roe_c = "#9CA3AF"
+    if pd.notna(roe):
+        try:
+            rv = float(roe)
+            roe_txt = f"{rv:.1f}%"
+            roe_c = "#10B981" if rv > 10 else ("#F59E0B" if rv > 5 else "#DC2626")
+        except Exception: pass
+    fgnr_txt = f"{fgnr:.1f}%" if pd.notna(fgnr) else "—"
+
+    # 영업이익률 표시 텍스트
+    if pd.notna(om_24) and pd.notna(om_25):
+        om_inner = f'<b style="color:#111;">{om_24:.2f}% → {om_25:.2f}%</b>{_yoy_html(om_diff, "%p")}'
+    else:
+        om_inner = '<b style="color:#111;">—</b>'
+
+    html = (
+        '<div style="background:#FAFAFA;border-top:1px solid #F3F4F6;padding:10px 18px;">'
+        # 성장등급 배지
+        '<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px;">'
+        f'<span style="background:{g_col};color:white;padding:2px 10px;border-radius:4px;'
+        f'font-size:10px;font-weight:700;letter-spacing:1px;">{grade_g or "데이터X"}</span>'
+        '<span style="font-size:10px;color:#9CA3AF;letter-spacing:1px;">2024 → 2025</span>'
+        '</div>'
+        # 매출/영업이익/영업이익률 3컬럼
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;font-size:11px;">'
+        '<div><span style="color:#9CA3AF;">매출</span><br>'
+        f'<b style="color:#111;">{_wonfmt(rev_24)} → {_wonfmt(rev_25)}</b>{_yoy_html(rev_yoy)}</div>'
+        '<div><span style="color:#9CA3AF;">영업이익</span><br>'
+        f'<b style="color:#111;">{_wonfmt(op_24)} → {_wonfmt(op_25)}</b>{_yoy_html(op_yoy)}</div>'
+        f'<div><span style="color:#9CA3AF;">영업이익률</span><br>{om_inner}</div>'
+        '</div>'
+        # PER/PBR/ROE/외인 한 줄
+        '<div style="margin-top:8px;padding-top:8px;border-top:1px dashed #E5E7EB;'
+        'display:grid;grid-template-columns:repeat(4,1fr);gap:8px;font-size:11px;">'
+        f'<div><span style="color:#9CA3AF;">PER</span> <b style="color:{per_c};">{per_txt}</b></div>'
+        f'<div><span style="color:#9CA3AF;">PBR</span> <b style="color:{pbr_c};">{pbr_txt}</b></div>'
+        f'<div><span style="color:#9CA3AF;">ROE</span> <b style="color:{roe_c};">{roe_txt}</b></div>'
+        f'<div><span style="color:#9CA3AF;">외인지분</span> <b style="color:#111;">{fgnr_txt}</b></div>'
+        '</div>'
+        '</div>'
+    )
+    return html
+
+
 def _simple_summary(row: pd.Series) -> str:
     """카드 헤더에 들어갈 한 줄 평어 요약 — 매출/영업이익/밸류에이션의 핵심만"""
     parts = []
@@ -585,45 +687,60 @@ def _render_pick_card(row: pd.Series, show_similar: bool = True):
         f'<span style="color:{main_color};font-size:11px;font-weight:700;margin-left:6px;">{main_strength}</span>'
         if main_strength else ""
     )
+    # 현재 수익률 헤더용 (흰글자)
+    cur_html_header = ""
+    if cur_ret is not None and pd.notna(cur_ret):
+        # 익절/손절 색상은 헤더에서 흰색 위 살짝 강조
+        cur_html_header = (
+            f'<div style="font-size:11px;color:white;opacity:0.9;font-weight:700;margin-top:3px;">'
+            f'현재 {cur_ret:+.1f}% ({cur_price:,.0f}원)</div>'
+        )
+
+    # 기업분석 인라인 HTML (디폴트 노출)
+    fundamentals_html = _render_fundamentals_inline(row, main_color)
+
     card_html = (
-        f'<div style="border:1px solid #E5E7EB;background:white;border-radius:10px;'
-        f'margin-bottom:12px;padding:14px 18px;">'
-        # 헤더: 등급 + 종목명 + 매수가 (한 줄)
-        f'<div style="display:flex;justify-content:space-between;align-items:flex-start;">'
+        f'<div style="border:1px solid {color}33;background:white;border-radius:10px;'
+        f'margin-bottom:12px;overflow:hidden;">'
+        # 1) 헤더 — 등급 컬러 면처리
+        f'<div style="background:{color};color:white;padding:12px 18px;'
+        f'display:flex;justify-content:space-between;align-items:flex-start;">'
         f'<div style="flex:1;">'
         f'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
-        f'<span style="background:{color};color:white;padding:2px 10px;border-radius:4px;'
+        f'<span style="background:rgba(255,255,255,0.22);color:white;padding:2px 10px;border-radius:4px;'
         f'font-size:10px;font-weight:700;letter-spacing:1px;">{grade}</span>'
-        f'<span style="font-size:18px;font-weight:800;color:#111;">{name}</span>'
-        f'<span style="font-size:11px;color:#9CA3AF;">{code} · {market} · {date}</span>'
+        f'<span style="font-size:18px;font-weight:800;color:white;">{name}</span>'
+        f'<span style="font-size:11px;color:rgba(255,255,255,0.75);">{code} · {market} · {date}</span>'
         f'</div>'
-        f'<div style="font-size:12px;color:#4B5563;margin-top:4px;">{summary}</div>'
+        f'<div style="font-size:12px;color:rgba(255,255,255,0.92);margin-top:4px;">{summary}</div>'
         f'</div>'
         f'<div style="text-align:right;">'
-        f'<div style="font-size:9px;color:#9CA3AF;letter-spacing:1px;">매수가</div>'
-        f'<div style="font-size:16px;font-weight:700;color:#111;">{close:,.0f}원</div>'
-        f'{cur_html}'
+        f'<div style="font-size:9px;color:rgba(255,255,255,0.7);letter-spacing:1px;">매수가</div>'
+        f'<div style="font-size:16px;font-weight:700;color:white;">{close:,.0f}원</div>'
+        f'{cur_html_header}'
         f'</div></div>'
-        # 메인 — 컬러 진행바 + 우측 % 숫자 (차분)
-        f'<div style="margin-top:14px;display:flex;align-items:center;gap:14px;">'
+        # 2) 기업분석 인라인 (디폴트 노출)
+        f'{fundamentals_html}'
+        # 3) 메인 % — 컬러 진행바 + 우측 큰 숫자
+        f'<div style="padding:14px 18px;background:white;border-top:1px solid #F3F4F6;">'
+        f'<div style="display:flex;align-items:center;gap:14px;">'
         f'<div style="flex:1;">'
         f'<div style="font-size:11px;color:#6B7280;margin-bottom:4px;font-weight:600;">'
-        f'{main_label} 가능성{strength_html}</div>'
+        f'가장 도달 확률 높은 구간 — <b style="color:{main_color};">{main_label}</b>{strength_html}</div>'
         f'<div style="background:#F3F4F6;border-radius:8px;height:14px;overflow:hidden;">'
-        f'<div style="background:{main_color};width:{bar_width}%;height:100%;'
-        f'border-radius:8px;transition:width 0.3s;"></div>'
+        f'<div style="background:{main_color};width:{bar_width}%;height:100%;border-radius:8px;"></div>'
         f'</div></div>'
         f'<div style="font-size:34px;font-weight:900;color:{main_color};line-height:1;min-width:80px;text-align:right;">'
         f'{main_prob:.0f}<span style="font-size:18px;font-weight:700;">%</span>'
         f'</div></div>'
-        # 푸터
+        # 4) 푸터
         f'<div style="margin-top:12px;padding-top:10px;border-top:1px solid #F3F4F6;'
         f'display:flex;justify-content:space-between;font-size:11px;color:#6B7280;">'
         f'<span>예상 최고가 <b style="color:{main_color};margin-left:4px;">+{peak_pred:.0f}%</b></span>'
         f'<span>슈퍼점수 <b style="color:#111;margin-left:4px;">{ss:.2f}</b></span>'
         f'<span>손절 확률 <b style="color:{ploss_col};margin-left:4px;">{ploss:.0f}%</b></span>'
         f'</div>'
-        f'</div>'
+        f'</div></div>'
     )
     st.markdown(card_html, unsafe_allow_html=True)
 
@@ -644,8 +761,7 @@ def _render_pick_card(row: pd.Series, show_similar: bool = True):
             bars_html += _prob_bar(lbl, pr, cc, is_main=is_main)
         st.markdown(bars_html, unsafe_allow_html=True)
 
-    _render_fundamentals_block(row)
-
+    # 기업분석은 카드 안에 이미 인라인으로 표시됨 — expander 제거
     reasons = _reason_text(row)
     if reasons:
         with st.expander(f"{name} — 강력추천 사유", expanded=False):
