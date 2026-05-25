@@ -1006,8 +1006,35 @@ def page_backtest():
         return "보합"                    # 0%~-20% 미세 손실
     picks["결과"] = picks.apply(cls, axis=1)
 
-    # 10만원 매수 시 수익금 (만원 단위)
-    picks["수익금_만원"] = (picks["ret_180d"].fillna(0) / 10).round(1)
+    # === 종목당 매수 금액 입력 (만원 단위) ===
+    if "bt_buy_amount" not in st.session_state:
+        st.session_state.bt_buy_amount = 10  # 디폴트 10만원
+
+    st.markdown("**종목당 매수 금액** (만원 단위)")
+    bcols = st.columns([1,1,1,1,1,2])
+    presets = [
+        ("10만", 10), ("50만", 50), ("100만", 100), ("300만", 300), ("500만", 500),
+    ]
+    for i, (label, amt) in enumerate(presets):
+        is_sel = st.session_state.bt_buy_amount == amt
+        if bcols[i].button(label, key=f"bt_amt_{amt}",
+                           type=("primary" if is_sel else "secondary"),
+                           use_container_width=True):
+            st.session_state.bt_buy_amount = amt
+            st.rerun()
+    custom_amt = bcols[5].number_input(
+        "직접 입력 (만원)", min_value=1, max_value=100000,
+        value=st.session_state.bt_buy_amount, step=10,
+        label_visibility="collapsed", key="bt_amt_custom_input",
+    )
+    if custom_amt != st.session_state.bt_buy_amount:
+        st.session_state.bt_buy_amount = int(custom_amt)
+        st.rerun()
+    buy_amount_man = st.session_state.bt_buy_amount  # 만원
+    st.caption(f"현재 설정: 종목당 **{buy_amount_man:,}만원** 매수 가정 (모든 수익금/투자금 자동 재계산)")
+
+    # 수익금(만원 단위) = ret% × 매수금만원 / 100
+    picks["수익금_만원"] = (picks["ret_180d"].fillna(0) * buy_amount_man / 100).round(1)
 
     # === 등급 자동 부여 ===
     # MASTER_best_picks는 이미 weekly_5 top 픽들. 그 안에서 SuperScore 분위로
@@ -1067,7 +1094,7 @@ def page_backtest():
         med_ret = filtered["ret_180d"].median()
         avg_peak = filtered["peak_180d"].mean()
         total_profit = filtered["수익금_만원"].sum()
-        invest_amount = n * 10
+        invest_amount = n * buy_amount_man  # 종목당 매수금 × 건수
         sw_n   = int((filtered["ret_180d"]>=200).sum())
         p100_n = int((filtered["ret_180d"]>=100).sum())
         p50_n  = int((filtered["ret_180d"]>=50).sum())
@@ -1101,7 +1128,7 @@ def page_backtest():
     <div style="font-size:10px;color:#9CA3AF;margin-top:2px;">매수 후 고점 평균</div>
   </div>
   <div style="background:{prof_col};color:white;border-radius:8px;padding:12px 16px;">
-    <div style="font-size:10px;opacity:0.85;letter-spacing:1px;">총 수익금 (10만원/종목)</div>
+    <div style="font-size:10px;opacity:0.85;letter-spacing:1px;">총 수익금 ({buy_amount_man}만/종목)</div>
     <div style="font-size:22px;font-weight:800;margin-top:2px;">{total_profit:+,.0f}<span style="font-size:13px;font-weight:600;opacity:0.95;"> 만</span></div>
     <div style="font-size:10px;opacity:0.9;margin-top:2px;">투자 대비 {total_profit/max(invest_amount,1)*100:+.1f}%</div>
   </div>
@@ -1161,6 +1188,7 @@ def page_backtest():
 
     st.markdown("")  # spacer
 
+    profit_col_label = f"수익금({buy_amount_man}만/종목,만원)"
     show_map = {
         "Date":"일자","년도":"년도","월":"월",
         "Code":"종목코드","Name":"종목명","Market":"시장",
@@ -1168,7 +1196,7 @@ def page_backtest():
         "결과":"결과",
         "ret_180d":"수익률(%)","peak_180d":"최고가(%)",
         "sell_close":"매도가/현재가",
-        "수익금_만원":"수익금(만,10만원당)",
+        "수익금_만원":profit_col_label,
         "SuperScore_v2":"슈퍼점수",
     }
     show_cols = [c for c in show_map if c in filtered.columns]
@@ -1220,7 +1248,7 @@ def page_backtest():
     if "등급" in display.columns:
         styler = style_apply(_grade_style, subset=["등급"])
         style_apply = getattr(styler, "map", None) or styler.applymap
-    for c in ["수익률(%)","최고가(%)","수익금(만,10만원당)"]:
+    for c in ["수익률(%)","최고가(%)", profit_col_label]:
         if c in display.columns:
             styler = style_apply(_return_style, subset=[c])
             style_apply = getattr(styler, "map", None) or styler.applymap
@@ -1231,8 +1259,8 @@ def page_backtest():
         if c in display.columns: fmt_map[c] = "{:,.0f}"   # 원 단위, 콤마, 소수 없음
     for c in ["수익률(%)","최고가(%)"]:
         if c in display.columns: fmt_map[c] = "{:+.1f}"   # 부호 포함, 소수 1자리
-    if "수익금(만,10만원당)" in display.columns:
-        fmt_map["수익금(만,10만원당)"] = "{:+,.1f}"        # 만원 단위 부호 + 콤마
+    if profit_col_label in display.columns:
+        fmt_map[profit_col_label] = "{:+,.1f}"        # 만원 단위 부호 + 콤마
     if "슈퍼점수" in display.columns:
         fmt_map["슈퍼점수"] = "{:.2f}"
     if fmt_map:
@@ -1243,7 +1271,7 @@ def page_backtest():
     st.caption(
         f"검색 결과 {len(filtered):,}건 중 최대 500건 표시. "
         f"**진행중 D-XX** = 매수일+260일까지 남은 일수. 수익률/최고가/매도가는 진행중이면 **현재까지 진행값**, "
-        f"수익금은 **10만원 매수 시** 만원 단위 손익."
+        f"수익금은 **{buy_amount_man}만원 매수 시** 만원 단위 손익."
     )
 
 
