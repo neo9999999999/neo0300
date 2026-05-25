@@ -609,7 +609,8 @@ def page_today_pick():
             _render_pick_card(pd.Series(p), show_similar=True)
 
 
-def _render_weekly_by_day(picks_list, week_limit=999):
+def _render_weekly_by_day(picks_list):
+    """일자별로 강력매수 종목 표시 — 카드는 인라인 렌더 (중첩 expander 금지)"""
     strong = [p for p in picks_list if "강력매수" in str(p.get("등급",""))]
     if len(strong) == 0:
         st.info("강력매수 종목 없음"); return
@@ -624,82 +625,39 @@ def _render_weekly_by_day(picks_list, week_limit=999):
         by_day.setdefault(d, []).append(p)
     dates_sorted = sorted(by_day.keys())
 
-    cumulative = 0; buy_n = 0
-    for d in dates_sorted:
-        day_picks = by_day[d]
-        def pri(p):
-            bonus = 100 if "슈퍼" in str(p.get("등급","")) else 0
-            return bonus + (p.get("SuperScore",0) or 0)*0.5 + (p.get("슈퍼위너확률%",0) or 0)*0.01
-        day_picks.sort(key=pri, reverse=True)
-        for p in day_picks:
-            cumulative += 1
-            if buy_n < week_limit:
-                p["_will_buy"] = True; buy_n += 1; p["_buy_no"] = buy_n
-            else:
-                p["_will_buy"] = False; p["_buy_no"] = None
-
-    st.markdown(f"### 강력매수 {len(strong)}건 — 주 한도 {week_limit}건 (선착순)")
-    st.caption(f"실전 룰: 매일 발견 즉시 매수 (NXT 19:50) · 같은 일 내 여러 건이면 슈퍼점수 높은 순 · 주 누적 {week_limit}건 채우면 그 주 stop")
+    st.markdown(f"### 강력매수 {len(strong)}건")
+    st.caption("실전 룰: 매일 발견 즉시 매수 (NXT 19:50) · 같은 일 내 여러 건이면 슈퍼점수 높은 순")
 
     weekday_kr = ["월","화","수","목","금","토","일"]
     for d in dates_sorted:
         try: wd = weekday_kr[pd.to_datetime(d).weekday()]
         except: wd = ""
         day_picks = by_day[d]
-        n_buy_today = sum(1 for p in day_picks if p["_will_buy"])
-        st.markdown(f"#### {d} ({wd}요일) — {len(day_picks)}건 / 매수 {n_buy_today}건")
+        # 슈퍼강력 먼저, 그 안에서 점수 순
+        def pri(p):
+            bonus = 100 if "슈퍼" in str(p.get("등급","")) else 0
+            return bonus + (p.get("SuperScore",0) or 0)*0.5 + (p.get("슈퍼위너확률%",0) or 0)*0.01
+        day_picks.sort(key=pri, reverse=True)
+        st.markdown(f"#### {d} ({wd}요일) — {len(day_picks)}건")
         for p in day_picks:
-            will = p["_will_buy"]; buy_no = p.get("_buy_no")
-            if will:
-                badge = (f'<span style="background:#DC2626;color:white;padding:2px 10px;border-radius:4px;'
-                         f'font-size:11px;font-weight:700;margin-right:8px;letter-spacing:1px;">그 주 {buy_no}번째 매수</span>')
-            else:
-                badge = (f'<span style="background:#9CA3AF;color:white;padding:2px 10px;border-radius:4px;'
-                         f'font-size:11px;font-weight:700;margin-right:8px;letter-spacing:1px;">주 한도 초과</span>')
-            ss = p.get("SuperScore", 0) or 0
-            psw = p.get("슈퍼위너확률%", 0) or 0
-            st.markdown(badge + f"<b>{p['Name']}</b> ({p['Code']}) · 슈퍼점수 {ss:.2f} · 슈퍼위너 {psw:.0f}%", unsafe_allow_html=True)
-            with st.expander(f"{p['Name']} 상세", expanded=False):
-                _render_pick_card(pd.Series(p), show_similar=True)
+            # 카드 인라인 렌더 (그 안의 expander가 정상 작동하도록)
+            _render_pick_card(pd.Series(p), show_similar=True)
         st.markdown("---")
-
-
-def _weekly_limit_selector(key_prefix: str) -> int:
-    options = {
-        "무제한 (모두 매수)": 999,
-        "10건/주": 10, "7건/주": 7, "5건/주": 5, "3건/주": 3,
-    }
-    if f"{key_prefix}_limit" not in st.session_state:
-        st.session_state[f"{key_prefix}_limit"] = "무제한 (모두 매수)"
-    st.markdown("**주 매수 한도** (자본에 맞춰 선택)")
-    cols = st.columns(len(options))
-    for i, label in enumerate(options.keys()):
-        is_sel = st.session_state[f"{key_prefix}_limit"] == label
-        btn_type = "primary" if is_sel else "secondary"
-        if cols[i].button(label, key=f"{key_prefix}_lim_{label}",
-                           type=btn_type, use_container_width=True):
-            st.session_state[f"{key_prefix}_limit"] = label
-            st.rerun()
-    return options[st.session_state[f"{key_prefix}_limit"]]
 
 
 def page_this_week():
     st.markdown('<h1 style="font-weight:800;">이번 주 추천</h1>', unsafe_allow_html=True)
     data = _load_json()
     week = data.get("week", {})
-    st.markdown(f"#### 주 시작일: {data.get('week_start', '')}")
-    st.caption("자본 충분하면 무제한(모두 매수) 추천 · 자본 적으면 한도 설정")
-    limit = _weekly_limit_selector("week")
-    _render_weekly_by_day(week.get("picks", []), week_limit=limit)
+    st.markdown(f"**주 시작일**: {data.get('week_start', '')}")
+    _render_weekly_by_day(week.get("picks", []))
 
 
 def page_last_week():
     st.markdown('<h1 style="font-weight:800;">지난 주 추천</h1>', unsafe_allow_html=True)
     data = _load_json()
     last_week = data.get("last_week", {})
-    st.caption("자본 충분하면 무제한(모두 매수) · 한도 자유 선택")
-    limit = _weekly_limit_selector("lw")
-    _render_weekly_by_day(last_week.get("picks", []), week_limit=limit)
+    _render_weekly_by_day(last_week.get("picks", []))
 
 
 def page_backtest():
@@ -735,7 +693,30 @@ def page_backtest():
     picks["년도"] = picks["Date"].dt.year
     picks["월"] = picks["Date"].dt.month
 
+    # === 180일 완료 여부 판정 ===
+    today = pd.Timestamp.now().normalize()
+    HOLD_CAL_DAYS = 260   # 180거래일 ≈ 260달력일 (안전치, 휴장 포함)
+    picks["경과일"] = (today - picks["Date"]).dt.days
+    picks["진행상태"] = np.where(
+        picks["경과일"] >= HOLD_CAL_DAYS, "완료", "진행중"
+    )
+    picks["D-남은일"] = (HOLD_CAL_DAYS - picks["경과일"]).clip(lower=0)
+
+    n_done = (picks["진행상태"]=="완료").sum()
+    n_ongoing = (picks["진행상태"]=="진행중").sum()
+    info_cols = st.columns(3)
+    info_cols[0].metric("180일 완료", f"{n_done:,}건")
+    info_cols[1].metric("진행중", f"{n_ongoing:,}건")
+    info_cols[2].metric("매수일 기준 평균 경과", f"{picks['경과일'].mean():.0f}일")
+    st.caption(
+        "**진행중**: 매수일+260일이 아직 안 지나 결과 미확정. "
+        "표의 '180일수익률' / '최고가도달'은 진행중일 경우 **현재까지의 진행값**이며 "
+        "180일 후 종가/최고가가 더 오르거나 떨어질 수 있음."
+    )
+
     def cls(row):
+        if row["진행상태"] == "진행중":
+            return "진행중"
         p = row.get("peak_180d", 0)
         if pd.isna(p): return "미정"
         if p >= 200: return "슈퍼위너"
@@ -750,7 +731,7 @@ def page_backtest():
     sel_years = _button_multiselect("년도 (다중 선택)", years_avail, default=years_avail, key_prefix="bt_year")
     months_avail = list(range(1, 13))
     sel_months = _button_multiselect("월 (다중 선택)", months_avail, default=months_avail, key_prefix="bt_month")
-    results_avail = ["슈퍼위너","100%+","50%+","10%+","보합","손절","미정"]
+    results_avail = ["슈퍼위너","100%+","50%+","10%+","보합","손절","진행중","미정"]
     sel_results = _button_multiselect("결과 (다중 선택)", results_avail,
                                        default=["슈퍼위너","100%+","50%+"], key_prefix="bt_result")
 
@@ -778,14 +759,26 @@ def page_backtest():
         picks["년도"].isin(sel_years) &
         picks["월"].isin(sel_months) &
         picks["결과"].isin(sel_results)
-    ]
+    ].copy()
     filtered = filtered.sort_values(sort_col_key, ascending=sort_asc)
+
+    # 진행중 case: 컬럼명을 "현재까지"로 보여주기 위해 상태 컬럼 추가
+    filtered["현재가/매도가"] = filtered["sell_close"]
+    filtered["수익률(%)"] = filtered["ret_180d"]
+    filtered["최고가도달(%)"] = filtered["peak_180d"]
+    filtered["진행"] = filtered.apply(
+        lambda r: f"진행중 (D-{int(r['D-남은일'])})" if r["진행상태"]=="진행중" else "완료(180일)",
+        axis=1,
+    )
+
     show_map = {
         "Date":"일자","년도":"년도","월":"월",
         "Code":"종목코드","Name":"종목명","Market":"시장",
-        "Close":"매수가","결과":"결과",
-        "ret_180d":"180일수익률(%)","peak_180d":"최고가도달(%)",
-        "sell_close":"매도가","sell_date":"매도일",
+        "Close":"매수가","진행":"진행상태",
+        "결과":"결과",
+        "수익률(%)":"수익률(%)",
+        "최고가도달(%)":"최고가(%)",
+        "현재가/매도가":"매도가/현재가",
         "SuperScore_v2":"슈퍼점수",
         "p_sw":"슈퍼위너확률","p_100plus":"100%+확률",
         "p_50plus":"50%+확률","p_loss":"손절확률",
@@ -794,11 +787,16 @@ def page_backtest():
     display = filtered[show_cols].rename(columns=show_map).head(500)
     if "일자" in display.columns:
         display["일자"] = pd.to_datetime(display["일자"]).dt.strftime("%Y-%m-%d")
+    for c in ["수익률(%)","최고가(%)"]:
+        if c in display.columns: display[c] = display[c].round(1)
     for c in ["슈퍼위너확률","100%+확률","50%+확률","손절확률"]:
         if c in display.columns:
             display[c] = (display[c]*100).round(1).astype(str) + "%"
     st.dataframe(display, hide_index=True, use_container_width=True, height=600)
-    st.caption(f"검색 결과 {len(filtered):,}건 중 최대 500건 표시")
+    st.caption(
+        f"검색 결과 {len(filtered):,}건 중 최대 500건 표시. "
+        f"**'진행중'** 표시된 행의 수익률/최고가는 **현재까지의 진행값** (180일 미완료)."
+    )
 
 
 def page_case_validation():
