@@ -992,16 +992,18 @@ def page_backtest():
         "단기 폭등 종목이 추출된 건 모델이 의도한 슈퍼위너 발굴 효과."
     )
 
-    # 결과 분류 = peak/ret 기준 (참고용 — 표에 표시만)
+    # 결과 분류 = 실제 매도가 수익률(ret_180d) 기준 (현실적인 실현 수익)
+    # 최고가도달(peak)은 별도 컬럼으로 참고만
     def cls(row):
-        p = row.get("peak_180d", 0)
-        if pd.isna(p): return "미정"
-        if p >= 200: return "슈퍼위너"
-        if p >= 100: return "100%+"
-        if p >= 50: return "50%+"
-        if p >= 10: return "10%+"
-        if row.get("ret_180d", 0) <= -20: return "손절"
-        return "보합"
+        r = row.get("ret_180d")
+        if pd.isna(r): return "미정"
+        if r >= 200: return "슈퍼위너"   # 실제 +200% 이상 익절
+        if r >= 100: return "100%+"     # 2배
+        if r >= 50:  return "50%+"
+        if r >= 10:  return "10%+"
+        if r <= -20: return "손절"
+        if r > 0:    return "소폭익절"   # 0~10% 미세 익절
+        return "보합"                    # 0%~-20% 미세 손실
     picks["결과"] = picks.apply(cls, axis=1)
 
     # 10만원 매수 시 수익금 (만원 단위)
@@ -1075,17 +1077,17 @@ def page_backtest():
     for c in ["수익률(%)","최고가(%)"]:
         if c in display.columns: display[c] = display[c].round(1)
 
-    # 결과 컬럼 색상 (한국식: 양수 빨강 / 음수 파랑)
+    # 결과 컬럼 색상 (한국식: 양수 빨강 / 음수 파랑) — ret_180d 기준
     def _result_style(val):
         cmap = {
-            "슈퍼위너": "background-color:#7F1D1D;color:white;font-weight:700;",
-            "100%+":   "background-color:#B91C1C;color:white;font-weight:700;",
-            "50%+":    "background-color:#DC2626;color:white;font-weight:700;",
-            "30%+":    "background-color:#EF4444;color:white;font-weight:700;",
-            "10%+":    "background-color:#F87171;color:white;",
-            "보합":    "background-color:#9CA3AF;color:white;",
-            "손절":    "background-color:#1D4ED8;color:white;font-weight:700;",
-            "미정":    "background-color:#E5E7EB;color:#6B7280;",
+            "슈퍼위너":  "background-color:#7F1D1D;color:white;font-weight:700;",
+            "100%+":    "background-color:#B91C1C;color:white;font-weight:700;",
+            "50%+":     "background-color:#DC2626;color:white;font-weight:700;",
+            "10%+":     "background-color:#EF4444;color:white;font-weight:700;",
+            "소폭익절":  "background-color:#F87171;color:white;",
+            "보합":     "background-color:#9CA3AF;color:white;",
+            "손절":     "background-color:#1D4ED8;color:white;font-weight:700;",
+            "미정":     "background-color:#E5E7EB;color:#6B7280;",
         }
         return cmap.get(str(val), "")
 
@@ -1247,8 +1249,8 @@ def page_buy_rule():
     <div style="font-size:13px;color:#374151;line-height:1.6;">
       · <b>슈퍼점수 상위 30%</b> (per pool)<br>
       · 일평균 <b>2~3건</b> 발생<br>
-      · 슈퍼위너 적중 <b>41.5%</b><br>
-      · 손절률 <b>8.9%</b><br>
+      · <b>200%+ 매도 27.7%</b> · 100%+ 매도 47.0%<br>
+      · 손절률 <b>8.9%</b> · 승률 <b>81.6%</b><br>
       · 평균 수익률 <b style="color:#B91C1C;">+151%</b><br>
       · 자본 부족해도 <b>필수 매수</b>
     </div>
@@ -1262,8 +1264,8 @@ def page_buy_rule():
     <div style="font-size:13px;color:#374151;line-height:1.6;">
       · <b>슈퍼점수 하위 70%</b> (per pool)<br>
       · 일평균 <b>3~5건</b> 발생<br>
-      · 슈퍼위너 적중 <b>22.6%</b><br>
-      · 손절률 <b>18.7%</b><br>
+      · <b>200%+ 매도 14.2%</b> · 100%+ 매도 27.6%<br>
+      · 손절률 <b>18.7%</b> · 승률 <b>63.9%</b><br>
       · 평균 수익률 <b style="color:#F97316;">+96%</b><br>
       · 자본 여유 시 <b>보완 매수</b>
     </div>
@@ -1296,15 +1298,21 @@ def page_buy_rule():
 | 손절 확률 (p_loss) | 대체로 < 0.20 | 0.20~0.35 허용 |
 | 일평균 발생 | 2~3건 | 3~5건 |
 
-### 5년 OOS 성과 (2022-2026 / MASTER_best_picks 1,155건 기준)
+### 5년 OOS 성과 — **실제 매도(180일 종가) 기준**
 
-| 등급 | 매수 | SW% | 100+% | 50+% | 손절% | **평균 수익률** | **총 수익금** |
-|---|---|---|---|---|---|---|---|
-| **슈퍼강력매수** (상위 30%) | 347 | **41.5%** | **66.3%** | **75.2%** | **8.9%** | **+151.1%** | **+5,242만** |
-| 추천매수 (하위 70%) | 808 | 22.6% | 39.9% | 56.3% | 18.7% | +95.7% | +7,733만 |
-| **합계** | **1,155** | 28.1% | 47.8% | 62.0% | 15.8% | +112.3% | **+12,975만** |
+> 모든 수치는 매수 후 180거래일에 정규장 종가로 매도한 실현 수익. 고점 도달이 아닌 **실제 실현 수익**.
 
-→ 10만원/종목 × 1,155건 = 투자 11,550만 / 수익 12,975만 = **+112% 수익률**
+| 등급 | 매수 | 200%+매도 | 100%+매도 | 50%+매도 | 손절% | 승률 | **평균 수익률** | **총 수익금** |
+|---|---|---|---|---|---|---|---|---|
+| **슈퍼강력매수** | 347 | **27.7%** | **47.0%** | **66.6%** | **8.9%** | **81.6%** | **+151.1%** | **+5,242만** |
+| 추천매수 | 808 | 14.2% | 27.6% | 42.5% | 18.7% | 63.9% | +95.7% | +7,733만 |
+| **합계** | **1,155** | 18.3% | 33.4% | 49.7% | 15.8% | 69.2% | +112.3% | **+12,975만** |
+
+→ 10만원/종목 × 1,155건 = 투자 1.16억 / 실현 수익 1.30억 = **5년 +112% (실현 기준)**
+
+#### 참고: 고점 도달률 (peak_180d ≥ 200%)
+- 슈퍼강력매수: 41.5% 도달 (실제 매도는 27.7%) — **고점 갔다가 일부 되돌림**
+- 추천매수: 22.6% 도달 (실제 매도는 14.2%)
 
 ### 매수 우선순위 & 시점
 
