@@ -23,7 +23,13 @@ CACHE = Path("cache")
 
 
 def load_data():
-    feats = pd.read_parquet(CACHE / "chart_feats_v1.parquet")
+    # 신규 시그널 풀 우선 (signals_2000_enriched.parquet, 2021-04 ~ 2026-05)
+    p_new = CACHE / "signals_2000_enriched.parquet"
+    p_old = CACHE / "chart_feats_v1.parquet"
+    if p_new.exists():
+        feats = pd.read_parquet(p_new)
+    else:
+        feats = pd.read_parquet(p_old)
     feats["Date"] = pd.to_datetime(feats["Date"])
     feats = feats[feats["Market"].isin(["KOSPI", "KOSDAQ"])].copy()
     sd_path = CACHE / "supply_demand.parquet"
@@ -37,16 +43,21 @@ def load_data():
 
 
 def apply_avoid_6(df):
-    """회피 6 (기본)"""
+    """회피 6 (기본, 누락 컬럼 안전 처리)"""
     d = df.copy()
-    x1 = (d["chart_pattern"] == "pullback_recovery") & (d["slope60"] <= -1) & (d["pos_252_high"] <= -40)
-    x2 = (d["Market"] == "KOSPI") & (d["past_120"] <= -20) & (d["pos_252_high"] <= -40)
-    x3 = (d["s12"] >= 80) & (d["new_high_252"] == 1) & (d["past_120"] >= 50)
-    x4 = d["past_240"] >= 100
-    x5 = d["past_240"] >= 150
-    x6 = d["Amount"] >= 3000e8
-    mask = x1 | x2 | x3 | x4 | x5 | x6
-    return d[~mask].copy()
+    mask = pd.Series(False, index=d.index)
+    if "chart_pattern" in d.columns and "slope60" in d.columns and "pos_252_high" in d.columns:
+        mask |= (d["chart_pattern"] == "pullback_recovery") & (d["slope60"] <= -1) & (d["pos_252_high"] <= -40)
+    if "past_120" in d.columns and "pos_252_high" in d.columns:
+        mask |= (d["Market"] == "KOSPI") & (d["past_120"] <= -20) & (d["pos_252_high"] <= -40)
+    if "s12" in d.columns and "new_high_252" in d.columns and "past_120" in d.columns:
+        mask |= (d["s12"] >= 80) & (d["new_high_252"] == 1) & (d["past_120"] >= 50)
+    if "past_240" in d.columns:
+        mask |= d["past_240"] >= 100
+        mask |= d["past_240"] >= 150
+    if "Amount" in d.columns:
+        mask |= d["Amount"] >= 3000e8
+    return d[~mask.fillna(False)].copy()
 
 
 def filter_top300(df, snap):
@@ -241,13 +252,24 @@ def build_picks(top_n_today=5, top_n_week=5):
         # 중복 제거 (Date+Code)
         this_month = this_month.sort_values("SuperScore", ascending=False).drop_duplicates(["Date","Code"])
 
-    # 오늘
+    # 오늘 (그날 시그널 전부 + 정렬)
     today_picks = this_month[this_month["Date"] == last_date].copy()
-    today_picks = today_picks.sort_values("SuperScore", ascending=False).head(top_n_today)
+    today_picks = today_picks.sort_values("SuperScore", ascending=False)
 
-    # 이번 주 TOP 5 (월~금 누적)
+    # 이번 주 TOP (월~금 누적 - 모두 표시)
     week_picks = this_month[(this_month["Date"] >= week_start)].copy()
-    week_picks = week_picks.sort_values("SuperScore", ascending=False).head(top_n_week)
+    week_picks = week_picks.sort_values("SuperScore", ascending=False)
+
+    # 지난 주 (월~금)
+    last_week_start = week_start - pd.Timedelta(days=7)
+    last_week_end = week_start - pd.Timedelta(days=1)
+    # 지난주 시그널은 별도 로드 필요할 수 있음 - 같은 풀 안에서 추출
+    last_week_pool = feats[(feats["Date"] >= last_week_start) & (feats["Date"] <= last_week_end)].copy()
+    if len(last_week_pool) > 0:
+        last_week_pool = compute_supabilities(last_week_pool, sd, cur)
+        last_week_pool = last_week_pool.sort_values("SuperScore", ascending=False).drop_duplicates(["Date","Code"])
+    else:
+        last_week_pool = pd.DataFrame()
 
     # 이번 달 TOP 20
     month_picks = this_month.sort_values("SuperScore", ascending=False).head(20)
@@ -268,6 +290,7 @@ def build_picks(top_n_today=5, top_n_week=5):
 
     save_picks(today_picks, "today_picks.csv")
     save_picks(week_picks, "week_picks.csv")
+    save_picks(last_week_pool, "last_week_picks.csv")
     save_picks(month_picks, "month_picks.csv")
 
     # JSON
@@ -276,8 +299,9 @@ def build_picks(top_n_today=5, top_n_week=5):
         "base_date": last_date.strftime("%Y-%m-%d"),
         "week_start": week_start.strftime("%Y-%m-%d"),
         "month_start": month_start.strftime("%Y-%m-%d"),
-        "today": {"n": len(today_picks), "picks": today_picks.head(20).to_dict(orient="records")},
-        "week": {"n": len(week_picks), "picks": week_picks.to_dict(orient="records")},
+        "today": {"n": len(today_picks), "picks": today_picks.head(50).to_dict(orient="records")},
+        "week": {"n": len(week_picks), "picks": week_picks.head(50).to_dict(orient="records")},
+        "last_week": {"n": len(last_week_pool), "picks": last_week_pool.head(50).to_dict(orient="records") if len(last_week_pool)>0 else []},
         "month": {"n": len(month_picks), "picks": month_picks.to_dict(orient="records")},
     }
     with open(CACHE / "today_picks.json", "w", encoding="utf-8") as f:
