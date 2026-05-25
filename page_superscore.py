@@ -202,8 +202,8 @@ def page_today_pick():
 
 
 def _render_weekly_by_day(picks_list, week_limit=5):
-    """일자별 그룹화 + 매수 우선순위 표시 (주 한도)"""
-    strong = _sort_strong(picks_list)
+    """일자별 그룹화 + 선착순 매수 (실전 룰: 매일 발견 즉시 매수, 주 누적 한도)"""
+    strong = [p for p in picks_list if p.get("등급") == "★ 강력매수"]
     if len(strong) == 0:
         st.info("★ 강력매수 종목 없음")
         return
@@ -217,18 +217,29 @@ def _render_weekly_by_day(picks_list, week_limit=5):
             try: d = pd.to_datetime(d).strftime("%Y-%m-%d")
             except: d = ""
         by_day.setdefault(d, []).append(p)
-    # 일자 순서 (오래된 → 최신, 매수 순서)
-    dates_sorted = sorted(by_day.keys())
+    dates_sorted = sorted(by_day.keys())  # 월→금 순
 
-    # 매수 우선순위 부여 (전체 슈퍼점수 정렬 순서대로 1~N)
-    for i, p in enumerate(strong, 1):
-        p["_buy_priority"] = i
-        p["_will_buy"] = i <= week_limit
+    # 선착순 매수 처리: 매일 발견 시 즉시 매수, 같은 일 내에서는 슈퍼점수 순
+    cumulative = 0
+    buy_n = 0
+    for d in dates_sorted:
+        day_picks = by_day[d]
+        # 같은 일 내 슈퍼점수 정렬 (그날 발견된 종목 중에서)
+        day_picks.sort(key=lambda p: (p.get("SuperScore", 0) or 0) * 0.5 + (p.get("슈퍼위너확률%", 0) or 0) * 0.01, reverse=True)
+        for p in day_picks:
+            cumulative += 1
+            p["_seq"] = cumulative   # 순서 번호 (전체)
+            if buy_n < week_limit:
+                p["_will_buy"] = True
+                buy_n += 1
+                p["_buy_no"] = buy_n
+            else:
+                p["_will_buy"] = False
+                p["_buy_no"] = None
 
     # 요약
-    n_buy = sum(1 for p in strong if p["_will_buy"])
-    st.markdown(f"### ★ 강력매수 {len(strong)}건 — 주 한도 {week_limit}건")
-    st.caption(f"실제 매수: 🔥 슈퍼점수 TOP {n_buy}건  ·  나머지 {len(strong)-n_buy}건은 한도 초과 (skip)")
+    st.markdown(f"### ★ 강력매수 {len(strong)}건 발생 — 주 한도 {week_limit}건 (선착순 매수)")
+    st.caption(f"📌 실전 룰: 매일 발견 즉시 매수 (NXT 19:50) · 같은 일 내 여러 건이면 슈퍼점수 높은 순 · 주 누적 {week_limit}건 채우면 그 주 stop")
 
     # 일자별 표시
     weekday_kr = ["월","화","수","목","금","토","일"]
@@ -240,19 +251,21 @@ def _render_weekly_by_day(picks_list, week_limit=5):
             wd = ""
         day_picks = by_day[d]
         n_buy_today = sum(1 for p in day_picks if p["_will_buy"])
-        n_skip_today = len(day_picks) - n_buy_today
 
         st.markdown(f"#### 📆 {d} ({wd}요일) — {len(day_picks)}건 발생 / 매수 {n_buy_today}건")
         for p in day_picks:
-            pri = p["_buy_priority"]
             will = p["_will_buy"]
-            badge = (
-                f'<span style="background:#DC2626;color:white;padding:2px 8px;border-radius:4px;'
-                f'font-size:11px;font-weight:700;margin-right:8px;">🔥 매수 우선순위 #{pri}</span>'
-                if will
-                else f'<span style="background:#9CA3AF;color:white;padding:2px 8px;border-radius:4px;'
-                     f'font-size:11px;font-weight:700;margin-right:8px;">⏭️ 주 한도 초과 (skip)</span>'
-            )
+            buy_no = p.get("_buy_no")
+            if will:
+                badge = (
+                    f'<span style="background:#DC2626;color:white;padding:2px 8px;border-radius:4px;'
+                    f'font-size:11px;font-weight:700;margin-right:8px;">🔥 그 주 {buy_no}번째 매수</span>'
+                )
+            else:
+                badge = (
+                    f'<span style="background:#9CA3AF;color:white;padding:2px 8px;border-radius:4px;'
+                    f'font-size:11px;font-weight:700;margin-right:8px;">⏭️ 주 한도 초과</span>'
+                )
             ss = p.get("SuperScore", 0) or 0
             psw = p.get("슈퍼위너확률%", 0) or 0
             st.markdown(badge + f"<b>{p['Name']}</b> ({p['Code']})  ·  슈퍼점수 {ss:.2f}  ·  슈퍼위너 {psw:.0f}%", unsafe_allow_html=True)
