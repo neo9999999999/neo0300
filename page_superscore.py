@@ -1149,11 +1149,14 @@ def page_backtest():
 </div>
 """, unsafe_allow_html=True)
         # OOS 검증 안내
-        st.success(
-            "**OOS 검증**: 모든 picks은 walk-forward 학습 결과. "
-            "2025 picks는 2024년까지 데이터로만 훈련된 모델이 선정, 2026 picks는 2025년까지. "
-            "수익률은 실제 KRX OHLCV 데이터 검증 (대한광통신 3,205→24,300 등). 미래 정보 누출 없음.",
-            icon="✓"
+        st.markdown(
+            '<div style="background:#ECFDF5;border:1px solid #10B981;border-radius:6px;'
+            'padding:10px 14px;margin-top:8px;font-size:12px;color:#065F46;line-height:1.5;">'
+            '<b>OOS 검증</b> · 모든 picks은 walk-forward 학습 결과. '
+            '2025 picks는 2024년까지 데이터로만 훈련된 모델이 선정, 2026 picks는 2025년까지. '
+            '수익률은 실제 KRX OHLCV 데이터 검증 (대한광통신 3,205→24,300 등). 미래 정보 누출 없음.'
+            '</div>',
+            unsafe_allow_html=True,
         )
 
     st.markdown("")  # spacer
