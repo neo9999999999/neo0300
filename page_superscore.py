@@ -1350,21 +1350,120 @@ def page_buy_rule():
 | 손절 확률 (p_loss) | 대체로 < 0.20 | 0.20~0.35 허용 |
 | 일평균 발생 | 2~3건 | 3~5건 |
 
-### 5년 OOS 성과 — **실제 매도(180일 종가) 기준**
+### 실제 5년 OOS 성과 — 매도 실현(180일 종가) 기준
+""")
 
-> 모든 수치는 매수 후 180거래일에 정규장 종가로 매도한 실현 수익. 고점 도달이 아닌 **실제 실현 수익**.
+    # === 등급별 비주얼 카드 ===
+    st.markdown("""
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:8px 0 16px;">
 
-| 등급 | 매수 | 200%+매도 | 100%+매도 | 50%+매도 | 손절% | 승률 | **평균 수익률** | **총 수익금** |
-|---|---|---|---|---|---|---|---|---|
-| **슈퍼강력매수** | 347 | **27.7%** | **47.0%** | **66.6%** | **8.9%** | **81.6%** | **+151.1%** | **+5,242만** |
-| 추천매수 | 808 | 14.2% | 27.6% | 42.5% | 18.7% | 63.9% | +95.7% | +7,733만 |
-| **합계** | **1,155** | 18.3% | 33.4% | 49.7% | 15.8% | 69.2% | +112.3% | **+12,975만** |
+  <!-- 슈퍼강력매수 카드 -->
+  <div style="border:2px solid #B91C1C;border-radius:10px;padding:16px 18px;background:white;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <span style="background:#B91C1C;color:white;padding:3px 12px;border-radius:4px;font-size:11px;font-weight:800;letter-spacing:1px;">슈퍼강력매수</span>
+      <span style="font-size:11px;color:#6B7280;">347건 (5년)</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;">
+      <div style="background:#FEF2F2;padding:6px 8px;border-radius:4px;">
+        <div style="font-size:10px;color:#7F1D1D;font-weight:700;">200%+ 매도</div>
+        <div style="font-size:18px;font-weight:900;color:#7F1D1D;">27.7%<span style="font-size:11px;color:#6B7280;font-weight:600;"> · 96건</span></div>
+      </div>
+      <div style="background:#FEE2E2;padding:6px 8px;border-radius:4px;">
+        <div style="font-size:10px;color:#B91C1C;font-weight:700;">100%+ 매도</div>
+        <div style="font-size:18px;font-weight:900;color:#B91C1C;">47.0%<span style="font-size:11px;color:#6B7280;font-weight:600;"> · 163건</span></div>
+      </div>
+      <div style="background:#FECACA;padding:6px 8px;border-radius:4px;">
+        <div style="font-size:10px;color:#DC2626;font-weight:700;">50%+ 매도</div>
+        <div style="font-size:18px;font-weight:900;color:#DC2626;">66.6%<span style="font-size:11px;color:#6B7280;font-weight:600;"> · 231건</span></div>
+      </div>
+      <div style="background:#FECACA;padding:6px 8px;border-radius:4px;">
+        <div style="font-size:10px;color:#EF4444;font-weight:700;">10%+ 매도</div>
+        <div style="font-size:18px;font-weight:900;color:#EF4444;">76.1%<span style="font-size:11px;color:#6B7280;font-weight:600;"> · 264건</span></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;font-size:11px;color:#6B7280;border-top:1px solid #F3F4F6;padding-top:8px;">
+      <span>승률 <b style="color:#B91C1C;">81.6%</b></span>
+      <span>·</span>
+      <span>손절 <b style="color:#1D4ED8;">8.9%</b></span>
+      <span>·</span>
+      <span>평균 <b style="color:#B91C1C;">+151.1%</b></span>
+    </div>
+    <div style="margin-top:6px;padding:8px 10px;background:#B91C1C;color:white;border-radius:6px;text-align:center;">
+      <div style="font-size:10px;opacity:0.85;letter-spacing:1px;">총 실현 수익 (10만원/종목)</div>
+      <div style="font-size:22px;font-weight:900;">+5,242만</div>
+    </div>
+  </div>
 
-→ 10만원/종목 × 1,155건 = 투자 1.16억 / 실현 수익 1.30억 = **5년 +112% (실현 기준)**
+  <!-- 추천매수 카드 -->
+  <div style="border:2px solid #F97316;border-radius:10px;padding:16px 18px;background:white;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <span style="background:#F97316;color:white;padding:3px 12px;border-radius:4px;font-size:11px;font-weight:800;letter-spacing:1px;">추천매수</span>
+      <span style="font-size:11px;color:#6B7280;">808건 (5년)</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;">
+      <div style="background:#FEF2F2;padding:6px 8px;border-radius:4px;">
+        <div style="font-size:10px;color:#7F1D1D;font-weight:700;">200%+ 매도</div>
+        <div style="font-size:18px;font-weight:900;color:#7F1D1D;">14.2%<span style="font-size:11px;color:#6B7280;font-weight:600;"> · 115건</span></div>
+      </div>
+      <div style="background:#FEE2E2;padding:6px 8px;border-radius:4px;">
+        <div style="font-size:10px;color:#B91C1C;font-weight:700;">100%+ 매도</div>
+        <div style="font-size:18px;font-weight:900;color:#B91C1C;">27.6%<span style="font-size:11px;color:#6B7280;font-weight:600;"> · 223건</span></div>
+      </div>
+      <div style="background:#FECACA;padding:6px 8px;border-radius:4px;">
+        <div style="font-size:10px;color:#DC2626;font-weight:700;">50%+ 매도</div>
+        <div style="font-size:18px;font-weight:900;color:#DC2626;">42.5%<span style="font-size:11px;color:#6B7280;font-weight:600;"> · 343건</span></div>
+      </div>
+      <div style="background:#FECACA;padding:6px 8px;border-radius:4px;">
+        <div style="font-size:10px;color:#EF4444;font-weight:700;">10%+ 매도</div>
+        <div style="font-size:18px;font-weight:900;color:#EF4444;">59.2%<span style="font-size:11px;color:#6B7280;font-weight:600;"> · 478건</span></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;font-size:11px;color:#6B7280;border-top:1px solid #F3F4F6;padding-top:8px;">
+      <span>승률 <b style="color:#F97316;">63.9%</b></span>
+      <span>·</span>
+      <span>손절 <b style="color:#1D4ED8;">18.7%</b></span>
+      <span>·</span>
+      <span>평균 <b style="color:#F97316;">+95.7%</b></span>
+    </div>
+    <div style="margin-top:6px;padding:8px 10px;background:#F97316;color:white;border-radius:6px;text-align:center;">
+      <div style="font-size:10px;opacity:0.85;letter-spacing:1px;">총 실현 수익 (10만원/종목)</div>
+      <div style="font-size:22px;font-weight:900;">+7,733만</div>
+    </div>
+  </div>
 
-#### 참고: 고점 도달률 (peak_180d ≥ 200%)
-- 슈퍼강력매수: 41.5% 도달 (실제 매도는 27.7%) — **고점 갔다가 일부 되돌림**
-- 추천매수: 22.6% 도달 (실제 매도는 14.2%)
+</div>
+
+<!-- 합계 -->
+<div style="background:linear-gradient(90deg,#DC2626,#F97316);color:white;border-radius:10px;padding:14px 20px;margin-bottom:16px;text-align:center;">
+  <div style="font-size:11px;opacity:0.9;letter-spacing:2px;">5년 합계 (2022~2026)</div>
+  <div style="font-size:28px;font-weight:900;margin-top:4px;">총 1,155건 매수 · +12,975만 실현 수익</div>
+  <div style="font-size:13px;opacity:0.95;margin-top:2px;">투자 1.16억 → 실현 1.30억 · 수익률 +112.3%</div>
+</div>
+""", unsafe_allow_html=True)
+
+    # === 년도별 표 ===
+    st.markdown("#### 년도별 매도 실현 (10만원/종목 기준)")
+    yr_data = pd.DataFrame([
+        {"년도":2022, "매수":260, "200%+":"8.8%", "100%+":"13.5%", "50%+":"23.5%", "10%+":"40.4%", "손절":"30.0%", "승률":"46.5%", "평균수익률":"+33.9%", "수익금":"+882만"},
+        {"년도":2023, "매수":260, "200%+":"10.0%","100%+":"23.5%", "50%+":"36.9%", "10%+":"55.0%", "손절":"18.1%", "승률":"60.4%", "평균수익률":"+57.9%", "수익금":"+1,506만"},
+        {"년도":2024, "매수":265, "200%+":"9.1%", "100%+":"24.5%", "50%+":"49.8%", "10%+":"66.0%", "손절":"18.1%", "승률":"68.7%", "평균수익률":"+68.5%", "수익금":"+1,816만"},
+        {"년도":2025, "매수":265, "200%+":"46.0%","100%+":"71.7%", "50%+":"85.7%", "10%+":"93.2%", "손절":"1.5%",  "승률":"95.8%", "평균수익률":"+292.5%","수익금":"+7,752만"},
+        {"년도":"2026 (진행중)", "매수":105, "200%+":"15.2%","100%+":"33.3%", "50%+":"55.2%", "10%+":"68.6%", "손절":"4.8%",  "승률":"81.0%", "평균수익률":"+97.0%", "수익금":"+1,019만"},
+    ])
+    st.dataframe(yr_data, hide_index=True, use_container_width=True)
+    st.caption(
+        "**2025년 폭발적 강세장 (+292% 평균)** 영향으로 5년 평균이 +112%로 끌어올려짐. "
+        "약세장(2022) -1.5% 수익은 가능하나 손절 30% 발생. **2025 같은 강세 사이클에서 슈퍼위너 집중 발굴**되는 게 핵심."
+    )
+
+    st.markdown("""
+#### 참고: 고점 도달 (peak_180d ≥ 200%) vs 매도 실현
+- 슈퍼강력매수: **고점 41.5% 도달** → 매도 시 **27.7% 실현** (13.8%p 되돌림)
+- 추천매수: 고점 22.6% 도달 → 매도 14.2% 실현 (8.4%p 되돌림)
+
+→ 모델은 슈퍼위너를 잘 찾지만 **고점에서 못 팔고 일부 되돌리는 게 현실**. 그래도 평균 +151% 실현은 충분히 강력.
+""")
+    st.markdown("""
 
 ### 매수 우선순위 & 시점
 
