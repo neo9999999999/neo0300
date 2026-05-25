@@ -191,13 +191,16 @@ def _peak_color(v):
 
 
 def _ret_color(v):
+    """한국식: + 상승 빨강, - 하락 파랑"""
     if pd.isna(v): return "#9CA3AF"
-    if v <= -20: return "#7F1D1D"
-    if v <= -5:  return "#DC2626"
-    if v < 5:    return "#9CA3AF"
-    if v < 30:   return "#10B981"
-    if v < 100:  return "#059669"
-    return "#047857"
+    if v >= 100:  return "#7F1D1D"   # 진빨강 (대박)
+    if v >= 30:   return "#B91C1C"   # 진빨강
+    if v >= 5:    return "#DC2626"   # 빨강
+    if v > 0:     return "#EF4444"   # 연빨강
+    if v == 0:    return "#6B7280"   # 보합 (드묾)
+    if v > -5:    return "#3B82F6"   # 연파랑
+    if v > -20:   return "#2563EB"   # 파랑
+    return "#1D4ED8"                  # 진파랑 (손절)
 
 
 def _peak_label_plain(v):
@@ -304,21 +307,21 @@ def _render_fundamentals_block(row: pd.Series):
             st.markdown(f"- 2024년: **{_fmt_won(rev_24)}**")
             st.markdown(f"- 2025년: **{_fmt_won(rev_25)}**")
             if pd.notna(rev_yoy):
-                c = "#10B981" if rev_yoy > 0 else "#DC2626"
+                c = "#DC2626" if rev_yoy > 0 else "#2563EB"
                 st.markdown(f"- YoY: <span style='color:{c};font-weight:700;'>{rev_yoy:+.1f}%</span>", unsafe_allow_html=True)
         with col2:
             st.markdown("**영업이익**")
             st.markdown(f"- 2024년: **{_fmt_won(op_24)}**")
             st.markdown(f"- 2025년: **{_fmt_won(op_25)}**")
             if pd.notna(op_yoy):
-                c = "#10B981" if op_yoy > 0 else "#DC2626"
+                c = "#DC2626" if op_yoy > 0 else "#2563EB"
                 st.markdown(f"- YoY: <span style='color:{c};font-weight:700;'>{op_yoy:+.1f}%</span>", unsafe_allow_html=True)
         with col3:
             st.markdown("**영업이익률**")
             st.markdown(f"- 2024년: **{om_24:.2f}%**" if pd.notna(om_24) else "- 2024년: —")
             st.markdown(f"- 2025년: **{om_25:.2f}%**" if pd.notna(om_25) else "- 2025년: —")
             if pd.notna(om_diff):
-                c = "#10B981" if om_diff > 0 else "#DC2626"
+                c = "#DC2626" if om_diff > 0 else "#2563EB"
                 st.markdown(f"- 변화: <span style='color:{c};font-weight:700;'>{om_diff:+.2f}%p</span>", unsafe_allow_html=True)
 
         st.markdown("---")
@@ -492,7 +495,7 @@ def _render_fundamentals_inline(row: pd.Series, accent_color: str) -> str:
 
     def _yoy_html(v, suffix="%"):
         if v is None or pd.isna(v): return ""
-        c = "#10B981" if v > 0 else "#DC2626"
+        c = "#DC2626" if v > 0 else "#2563EB"  # 한국식: + 빨강 / - 파랑
         return f' <span style="color:{c};font-weight:700;font-size:10px;">{v:+.1f}{suffix}</span>'
 
     def _per_eval(v):
@@ -661,7 +664,8 @@ def _render_pick_card(row: pd.Series, show_similar: bool = True):
         main_strength = _clean(main_strength).replace("도달", "").strip()
 
     # ===== 카드 HTML (차분) =====
-    ploss_col = "#DC2626" if ploss >= 25 else "#10B981"
+    # 손절 확률은 '하락' 의미 → 한국식 파랑 / 낮으면 회색
+    ploss_col = "#1D4ED8" if ploss >= 25 else "#6B7280"
     bar_width = max(2, min(100, main_prob))
     # 현재 수익률 배지 (매수일 이후 경과 시에만)
     cur_html = ""
@@ -1092,14 +1096,16 @@ def page_backtest():
         return ""
 
     def _return_style(val):
+        """한국식: + 빨강 / - 파랑"""
         try:
             v = float(val)
-            if v >= 100: return "color:#B91C1C;font-weight:800;"
-            if v >= 30:  return "color:#DC2626;font-weight:700;"
-            if v >= 10:  return "color:#10B981;font-weight:700;"
-            if v <= -20: return "color:#7F1D1D;font-weight:800;"
-            if v < 0:    return "color:#DC2626;"
-            return "color:#6B7280;"
+            if v >= 100:  return "color:#7F1D1D;font-weight:800;"   # 진빨강
+            if v >= 30:   return "color:#B91C1C;font-weight:700;"   # 진빨강
+            if v >= 10:   return "color:#DC2626;font-weight:700;"   # 빨강
+            if v > 0:     return "color:#EF4444;"                    # 연빨강
+            if v == 0:    return "color:#6B7280;"
+            if v > -20:   return "color:#2563EB;font-weight:600;"   # 파랑
+            return "color:#1D4ED8;font-weight:800;"                  # 진파랑 (손절)
         except Exception: return ""
 
     styler = display.style
@@ -1130,7 +1136,7 @@ def page_backtest():
   </div>
   <div style="background:#FAFAFA;border-radius:6px;padding:8px 12px;text-align:center;">
     <div style="font-size:10px;color:#6B7280;">평균 수익률</div>
-    <div style="font-size:18px;font-weight:800;color:{'#10B981' if avg_ret>0 else '#DC2626'};">{avg_ret:+.1f}%</div>
+    <div style="font-size:18px;font-weight:800;color:{'#DC2626' if avg_ret>0 else '#2563EB'};">{avg_ret:+.1f}%</div>
   </div>
   <div style="background:#FAFAFA;border-radius:6px;padding:8px 12px;text-align:center;">
     <div style="font-size:10px;color:#6B7280;">평균 최고가</div>
@@ -1146,7 +1152,7 @@ def page_backtest():
   </div>
   <div style="background:#FAFAFA;border-radius:6px;padding:8px 12px;text-align:center;">
     <div style="font-size:10px;color:#6B7280;">총 수익금 (10만원/종목)</div>
-    <div style="font-size:18px;font-weight:800;color:{'#10B981' if total_profit>0 else '#DC2626'};">{total_profit:+,.0f}만</div>
+    <div style="font-size:18px;font-weight:800;color:{'#DC2626' if total_profit>0 else '#2563EB'};">{total_profit:+,.0f}만</div>
   </div>
 </div>
 """, unsafe_allow_html=True)
