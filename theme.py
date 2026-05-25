@@ -27,12 +27,12 @@ TOKENS = {
         "text_3": "#8B95A1",
         "text_disabled": "#B0B8C1",
         "text_on_accent": "#FFFFFF",
-        # 액센트 (네이버 그린)
+        # 액센트 (한국 시세 빨강)
         "accent": "#DC2626",
-        "accent_strong": "#02B255",
-        "accent_dark": "#019543",
-        "accent_soft": "#E8FFEF",
-        "accent_softer": "#F0FFF5",
+        "accent_strong": "#B91C1C",
+        "accent_dark": "#991B1B",
+        "accent_soft": "#FEF2F2",
+        "accent_softer": "#FFF5F5",
         # 그라데이션
         "gradient_start": "#EF4444",
         "gradient_end": "#DC2626",
@@ -58,11 +58,11 @@ TOKENS = {
         "text_disabled": "#484F58",
         "text_on_accent": "#FFFFFF",
         "accent": "#DC2626",
-        "accent_strong": "#04D466",
-        "accent_dark": "#02B255",
-        "accent_soft": "#0E2F1A",
-        "accent_softer": "#0A2014",
-        "gradient_start": "#04D466",
+        "accent_strong": "#EF4444",
+        "accent_dark": "#B91C1C",
+        "accent_soft": "#2A0E0E",
+        "accent_softer": "#1A0808",
+        "gradient_start": "#EF4444",
         "gradient_end": "#DC2626",
         "up": "#FF6B6B",
         "up_soft": "#3A1E22",
@@ -126,7 +126,7 @@ def get_css(mode: str = "light") -> str:
     --down-soft: {t['down_soft']};
     --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
     --shadow-md: 0 2px 8px rgba(0,0,0,0.06);
-    --shadow-lg: 0 8px 24px rgba(3,199,90,0.12);
+    --shadow-lg: 0 8px 24px rgba(220,38,38,0.12);
 }}
 
 /* =========================================================
@@ -202,7 +202,7 @@ button[kind="primary"],
     background: var(--gradient) !important;
     background-color: var(--accent) !important;
     border: none !important;
-    box-shadow: 0 2px 6px rgba(3,199,90,0.20) !important;
+    box-shadow: 0 2px 6px rgba(220,38,38,0.20) !important;
     transition: all 0.18s ease !important;
 }}
 button[kind="primary"] *,
@@ -222,7 +222,7 @@ button[kind="primary"]:hover,
 [data-testid="baseButton-primary"]:hover,
 [data-testid="stBaseButton-primary"]:hover {{
     transform: translateY(-1px) !important;
-    box-shadow: 0 4px 14px rgba(3,199,90,0.30) !important;
+    box-shadow: 0 4px 14px rgba(220,38,38,0.30) !important;
     filter: brightness(1.05) !important;
 }}
 
@@ -581,7 +581,7 @@ footer, #MainMenu {{
     background: var(--gradient);
     color: #FFFFFF !important;
     border-color: var(--accent-dark);
-    box-shadow: 0 2px 6px rgba(3,199,90,0.20);
+    box-shadow: 0 2px 6px rgba(220,38,38,0.20);
 }}
 @media (max-width: 768px) {{
     .mobile-nav {{ display: block; }}
@@ -657,7 +657,7 @@ def get_logo_html(mode: str = "light") -> str:
         f'<div style="display:flex;align-items:center;gap:12px;">'
         f'<div style="width:34px;height:34px;background:linear-gradient(135deg,{t["gradient_start"]} 0%,{t["gradient_end"]} 100%);'
         f'border-radius:10px;display:flex;align-items:center;justify-content:center;'
-        f'box-shadow:0 2px 8px rgba(3,199,90,0.25);">'
+        f'box-shadow:0 2px 8px rgba(220,38,38,0.25);">'
         f'<span style="color:#FFFFFF;font-weight:900;font-size:18px;letter-spacing:-1px;">N</span>'
         f'</div>'
         f'<div>'
