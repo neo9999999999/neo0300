@@ -98,7 +98,7 @@ _check_password()
 
 # ===== 세션 디폴트 =====
 DEFAULTS = {
-    "page": "today",
+    "page": "superscore",
     "theme": "light",
     "preset": "default",
     "trade_type": "전체",
@@ -129,6 +129,7 @@ with st.sidebar:
     st.markdown(get_logo_html(st.session_state.theme), unsafe_allow_html=True)
 
     PAGES = [
+        ("💎 SuperScore 추천 (최신)", "superscore"),
         ("오늘의 종가매수 추천", "today"),
         ("백테스트 결과", "results"),
         ("사례 & 가이드", "library"),
@@ -4107,10 +4108,20 @@ def page_admin():
 # =============================================================================
 # 라우팅
 # =============================================================================
+try:
+    from page_superscore import page_superscore
+except Exception as _e:
+    def page_superscore():
+        st.error(f"SuperScore 페이지 로드 실패: {_e}")
+
 ROUTES = {
+    "superscore": page_superscore,
     "today": page_today,
     "results": page_results,
     "library": page_library,
     "admin": page_admin,
 }
-ROUTES.get(st.session_state.page, page_today)()
+# 기본 페이지를 superscore로 변경
+if "page" not in st.session_state or st.session_state.page not in ROUTES:
+    st.session_state.page = "superscore"
+ROUTES.get(st.session_state.page, page_superscore)()
