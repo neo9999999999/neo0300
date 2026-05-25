@@ -1128,7 +1128,10 @@ def page_backtest():
   <div style="background:white;border:1px solid #E5E7EB;border-radius:8px;padding:12px 16px;">
     <div style="font-size:10px;color:#6B7280;letter-spacing:1px;">평균 수익률 (매도)</div>
     <div style="font-size:22px;font-weight:800;color:{ret_col};margin-top:2px;">{avg_ret:+.1f}%</div>
-    <div style="font-size:10px;color:#9CA3AF;margin-top:2px;">중앙 {med_ret:+.1f}% · 승률 {win_n/max(n,1)*100:.0f}%</div>
+    <div style="font-size:10px;color:#9CA3AF;margin-top:2px;">
+      승률 <b style="color:#374151;">{win_n/max(n,1)*100:.0f}%</b>
+      · 손절제외 <b style="color:#B91C1C;">{win_n/max(n-loss_n,1)*100:.0f}%</b>
+    </div>
   </div>
   <div style="background:white;border:1px solid #E5E7EB;border-radius:8px;padding:12px 16px;">
     <div style="font-size:10px;color:#6B7280;letter-spacing:1px;">평균 최고가 도달</div>
@@ -1424,6 +1427,7 @@ def page_buy_rule():
         {"항목": "손절 (-5%↓)",         "슈퍼강력매수": "55건 (15.9%)",   "추천매수": "260건 (32.2%)"},
         # ─── 종합 ───
         {"항목": "총 승률 (5%+ 익절)",   "슈퍼강력매수": "276건 (79.5%)",  "추천매수": "497건 (61.5%)"},
+        {"항목": "손절 제외 승률",       "슈퍼강력매수": "276/292 (94.5%)", "추천매수": "497/548 (90.7%)"},
         {"항목": "평균 수익률",         "슈퍼강력매수": "+151.1%",        "추천매수": "+95.7%"},
         {"항목": "총 실현 수익 (10만/종목)", "슈퍼강력매수": "+5,242만",   "추천매수": "+7,733만"},
     ])
