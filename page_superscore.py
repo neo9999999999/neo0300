@@ -1109,10 +1109,8 @@ def page_backtest():
         except Exception: return ""
 
     # pandas >=2.1.0 권장: Styler.map (applymap 은 deprecated)
-    _map_fn = getattr(display.style, "map", None) or display.style.applymap
     styler = display.style
-    style_map = getattr(styler, "map", None)
-    style_apply = style_map if style_map else styler.applymap
+    style_apply = getattr(styler, "map", None) or styler.applymap
     if "결과" in display.columns:
         styler = style_apply(_result_style, subset=["결과"])
         style_apply = getattr(styler, "map", None) or styler.applymap
@@ -1123,6 +1121,20 @@ def page_backtest():
         if c in display.columns:
             styler = style_apply(_return_style, subset=[c])
             style_apply = getattr(styler, "map", None) or styler.applymap
+
+    # 컬럼별 숫자 포맷 (소수점 제거 / 콤마 천 단위)
+    fmt_map = {}
+    for c in ["매수가","매도가/현재가"]:
+        if c in display.columns: fmt_map[c] = "{:,.0f}"   # 원 단위, 콤마, 소수 없음
+    for c in ["수익률(%)","최고가(%)"]:
+        if c in display.columns: fmt_map[c] = "{:+.1f}"   # 부호 포함, 소수 1자리
+    if "수익금(만,10만원당)" in display.columns:
+        fmt_map["수익금(만,10만원당)"] = "{:+,.1f}"        # 만원 단위 부호 + 콤마
+    if "슈퍼점수" in display.columns:
+        fmt_map["슈퍼점수"] = "{:.2f}"
+    if fmt_map:
+        styler = styler.format(fmt_map, na_rep="—")
+
     st.dataframe(styler, hide_index=True, use_container_width=True, height=600)
 
     # 요약 카드 (선택된 행 기준)
